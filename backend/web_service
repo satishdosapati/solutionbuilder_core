@@ -1,0 +1,10 @@
+digraph "Web Service" {
+	graph [fontcolor="#2D3436" fontname="Sans-Serif" fontsize=15 label="Web Service" nodesep=0.60 pad=2.0 rankdir=LR ranksep=0.75 splines=ortho]
+	node [fixedsize=true fontcolor="#2D3436" fontname="Sans-Serif" fontsize=13 height=1.4 imagescale=true labelloc=b shape=box style=rounded width=1.4]
+	edge [color="#7B8894"]
+	d0cb957cbdc645daacdf3af9aac01849 [label=lb height=1.9 image="C:\Users\usdoss02\solutionbuilder_core\backend\venv\Lib\site-packages\resources/aws/network\elastic-load-balancing.png" shape=none]
+	"7084f24d80f64ed9bf76879a79d49b44" [label=web height=1.9 image="C:\Users\usdoss02\solutionbuilder_core\backend\venv\Lib\site-packages\resources/aws/compute\ec2.png" shape=none]
+	d0cb957cbdc645daacdf3af9aac01849 -> "7084f24d80f64ed9bf76879a79d49b44" [dir=forward fontcolor="#2D3436" fontname="Sans-Serif" fontsize=13]
+	eaa95c4dccd544058b76c03aa40eb089 [label=userdb height=1.9 image="C:\Users\usdoss02\solutionbuilder_core\backend\venv\Lib\site-packages\resources/aws/database\rds.png" shape=none]
+	"7084f24d80f64ed9bf76879a79d49b44" -> eaa95c4dccd544058b76c03aa40eb089 [dir=forward fontcolor="#2D3436" fontname="Sans-Serif" fontsize=13]
+}

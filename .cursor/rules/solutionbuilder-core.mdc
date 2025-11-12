@@ -1,0 +1,75 @@
+---
+alwaysApply: true
+---
+# ⚙️ Structure
+/frontend → React + Tailwind (TypeScript, minimal deps)  
+/backend → FastAPI (Python 3.11+, async, stateless)  
+/docs → product & prompt trackers  
+/prompts → evolving prompt strategies  
+/tests → small automation tests  
+Each folder has a short `README.md` (1 paragraph).
+
+---
+
+# 🧩 Implementation
+- **No unnecessary files, mocks, or placeholders.**
+- Prefer modifying existing modules over creating new ones.
+- Functions/classes <100 lines; modules <500 lines.
+- Use `.env` or AWS Secrets Manager for credentials.
+- **Never commit `.env` files or hardcoded credentials — use `.gitignore` and `env.example` templates.**
+- Avoid redundant dependencies and UI libraries.
+- Code must read like documentation — clean, async, minimal.
+
+---
+
+# 🚀 Build & Install
+- If install fails (missing deps or flags), update `requirements.txt` / `package.json` and `/docs/product_tracker.md`.
+- Maintain lightweight setup scripts:
+  - `/backend/setup.sh`
+  - `/frontend/setup.sh`
+- Confirm each dependency is essential before committing.
+
+---
+
+# 🧾 Trackers (Keep Minimal)
+**Product Tracker (`/docs/product_tracker.md`)**
+[Date]  
+Change:  
+Impact:  
+Next Steps:  
+
+**Prompt Tracker (`/prompts/prompt_tracker.md`)**
+Version:  
+Focus:  
+Outcome:  
+Learnings:  
+Next Focus:  
+
+- Each entry ≤7 lines.
+- Summarize older entries; archive after 3 releases (`/docs/archive/`).
+- Keep total tracker size <200 lines.
+
+---
+
+# 📦 Releases
+- Each stable iteration → new version in `/releases/vX.Y/`.
+  - Include `rules.yaml`, `product_summary.md`, `prompt_summary.md`, `changelog.md`.
+- Update `/releases/release_log.md` with one-line summaries.
+- Summaries auto-generated from trackers; <150 words.
+- Snapshot `.cursor/rules` for version reproducibility.
+
+---
+
+# 🔄 Collaboration & Evolution (project-specific)
+- Review trackers weekly; prune clutter.
+- Summarize plans before major code generation.
+- Use releases and snapshotting to maintain reproducible versions.
+
+---
+
+# 🧠 Goal
+A **lean, evolving, self-documenting** project.
+Fast to understand, easy to maintain, and pleasant to extend.
+No excess. No fluff. Built for longevity.
+
+---

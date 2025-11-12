@@ -1,0 +1,67 @@
+{
+  "brand": {
+    "name": "Archai",
+    "tagline": "The Intelligent AI Co-Architect to Support You on Your Cloud Journey",
+    "description": "Archai is an AI-powered co-architect that helps cloud engineers and architects design, validate, and deploy enterprise-grade solutions at speed. It bridges human intent and cloud automation with intelligence, precision, and trust.",
+    "mission": "Empower every architect to design the cloud at the speed of thought.",
+    "tone": ["Intelligent", "Supportive", "Visionary", "Professional"]
+  },
+  "colors": {
+    "primary": "#FF9900",
+    "secondary": "#1E293B", 
+    "accent": "#0EA5E9",
+    "background": "#0F172A",
+    "surface": "#1E293B",
+    "text_primary": "#FFFFFF",
+    "text_secondary": "#CBD5E1",
+    "success": "#10B981",
+    "warning": "#F59E0B",
+    "error": "#EF4444"
+  },
+  "fonts": {
+    "heading": "Inter Tight, sans-serif",
+    "body": "Inter, sans-serif", 
+    "code": "JetBrains Mono, monospace",
+    "font_weights": {
+      "heading": 600,
+      "subheading": 500,
+      "body": 400
+    }
+  },
+  "modes": {
+    "brainstorm": {
+      "name": "Brainstorm",
+      "icon": "🧠",
+      "description": "Explore AWS services and best practices",
+      "color": "#FF9900",
+      "tagline": "Think faster with AI-powered insights"
+    },
+    "analyze": {
+      "name": "Analyze", 
+      "icon": "🔍",
+      "description": "Intelligent requirements analysis and recommendations",
+      "color": "#0EA5E9",
+      "tagline": "Build safer with comprehensive analysis"
+    },
+    "generate": {
+      "name": "Generate",
+      "icon": "⚡", 
+      "description": "Deploy-ready CloudFormation and architecture",
+      "color": "#10B981",
+      "tagline": "Deploy smarter with automated generation"
+    }
+  },
+  "ui": {
+    "logo": {
+      "text": "A",
+      "background": "#FF9900",
+      "size": "h-8 w-8"
+    },
+    "hero": {
+      "title": "Design the Cloud at the Speed of Thought",
+      "subtitle": "Archai — The Intelligent AI Co-Architect to Support You on Your Cloud Journey",
+      "cta_primary": "Try Archai Free",
+      "cta_secondary": "View Demo"
+    }
+  }
+}
