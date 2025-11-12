@@ -70,13 +70,13 @@ setup.bat
 ./setup.sh
 ```
 
-### 4. Install Core MCP Server
+### 4. MCP Server Configuration
 
-The Core MCP Server will be automatically installed via `uvx` when the backend starts. Make sure you have:
+MCP servers are configured in `backend/config/mode_servers.json`. The system automatically manages MCP server connections based on mode selection. Ensure:
 
 - AWS credentials configured
-- Internet access for downloading the MCP server
-- Python 3.12+ (required by MCP server)
+- Internet access for MCP server operations
+- Python 3.11+ (Python 3.13 has known compatibility issues with uvicorn reloader on Windows)
 
 ## Running the Application
 
@@ -97,12 +97,19 @@ run_dev.bat
 # Terminal 1 - Backend
 cd backend
 source venv/bin/activate  # or venv\Scripts\activate on Windows
+
+# For Python 3.11/3.12 (with reload)
 uvicorn main:app --reload --port 8000
+
+# For Python 3.13 (without reload - recommended)
+uvicorn main:app --no-reload --port 8000
 
 # Terminal 2 - Frontend
 cd frontend
 npm run dev
 ```
+
+**Note**: If using Python 3.13 on Windows, use `--no-reload` flag or the provided startup scripts (`start.bat` or `start.sh`) to avoid multiprocessing issues.
 
 ## Access Points
 
@@ -112,34 +119,43 @@ npm run dev
 
 ## How It Works
 
-### 1. Role Selection
-- Select one or more AWS Solution Architect roles from the UI
-- Each role maps to specific MCP servers
+### 1. Mode Selection
+- Select from three modes: **Brainstorm**, **Analyze**, or **Generate**
+- Each mode automatically configures relevant MCP servers
 
 ### 2. MCP Server Orchestration
-- The Core MCP Server dynamically enables relevant MCP servers based on selected roles
-- Uses environment variables to configure role-based server activation
+- The system dynamically enables relevant MCP servers based on selected mode
+- Configuration is defined in `backend/config/mode_servers.json`
+- MCP servers are selected based on mode requirements and intent detection
 
-### 3. Strands Agents Integration
-- Three specialized agents run in parallel:
-  - **CloudFormation Agent**: Generates infrastructure templates
-  - **Architecture Diagram Agent**: Creates visual diagrams
-  - **Cost Estimation Agent**: Provides pricing analysis
+### 3. Mode-Specific Functionality
+
+**🧠 Brainstorm Mode:**
+- Uses AWS Knowledge MCP Server for documentation search
+- Provides concise answers with AWS best practices
+- Suggests follow-up questions
+
+**🔍 Analyze Mode:**
+- Uses intent-based MCP orchestrator to detect requirements
+- Analyzes keywords and intents to select appropriate MCP servers
+- Provides comprehensive analysis with service recommendations
+
+**⚡ Generate Mode:**
+- Uses multiple MCP servers for CloudFormation, diagrams, and cost estimation
+- Generates production-ready templates and artifacts
+- Provides detailed cost breakdowns and optimization suggestions
 
 ### 4. Real AWS Integration
 - Agents use MCP tools to interact with real AWS services
 - Get current pricing, service information, and best practices
 - Generate production-ready outputs
 
-## Role-to-MCP Server Mapping
+## Mode-to-MCP Server Mapping
 
-| Role | MCP Servers Enabled |
-|------|-------------------|
-| `aws-foundation` | aws-knowledge-server, aws-api-server |
-| `serverless-architecture` | serverless-server, lambda-tool-server, stepfunctions-tool-server, sns-sqs-server |
-| `container-orchestration` | eks-server, ecs-server, finch-server |
-| `solutions-architect` | diagram-server, pricing-server, cost-explorer-server, syntheticdata-server, aws-knowledge-server |
-| ... | (see full mapping in code) |
+MCP servers are configured per mode in `backend/config/mode_servers.json`. The system automatically selects servers based on:
+- Mode requirements (brainstorm, analyze, generate)
+- Intent detection (keywords and patterns in user requirements)
+- Service dependencies
 
 ## Troubleshooting
 

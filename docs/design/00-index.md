@@ -1,11 +1,22 @@
 # Design Documents Index
 
-**Project:** AWS Cloud Architecture Generation SaaS Platform  
-**Last Updated:** 2024-01-XX
+**Project:** Archai - AWS Cloud Architecture Generation SaaS Platform  
+**Last Updated:** 2024-01-15
+
+## ⚠️ Implementation Status
+
+**Important**: These design documents describe the **target architecture** for a full SaaS platform. The current implementation is a **simplified MVP** focused on the core three modes.
+
+**Current Status:**
+- ✅ **Implemented**: Brainstorm, Analyze, and Generate modes (simplified versions)
+- 🚧 **Partially Implemented**: Mode-based MCP orchestration
+- ❌ **Not Implemented**: Authentication, database, artifact persistence, admin features
+
+**See**: [`../../IMPLEMENTATION_STATUS.md`](../../IMPLEMENTATION_STATUS.md) for detailed implementation status.
 
 ## Overview
 
-This directory contains comprehensive design documents for implementing the SaaS platform. Each document is self-contained and ready for implementation.
+This directory contains comprehensive design documents for implementing the full SaaS platform. Each document is self-contained and ready for implementation. Documents marked with ⚠️ describe features not yet implemented in the current MVP.
 
 ## Implementation Design Documents
 
@@ -18,7 +29,7 @@ This directory contains comprehensive design documents for implementing the SaaS
    - Data flow
    - Performance targets
 
-2. **[02-authentication-user-management.md](./02-authentication-user-management.md)**
+2. **[02-authentication-user-management.md](./02-authentication-user-management.md)** ⚠️ **Not Implemented**
    - Google OAuth integration
    - User management
    - Organization model
@@ -27,71 +38,74 @@ This directory contains comprehensive design documents for implementing the SaaS
 
 ### Mode-Specific Features
 
-3. **[03-brainstorm-mode.md](./03-brainstorm-mode.md)**
-   - Q&A functionality
-   - AWS Knowledge MCP integration
-   - Caching strategy
-   - Frontend components
+3. **[03-brainstorm-mode.md](./03-brainstorm-mode.md)** ✅ **Implemented (Simplified)**
+   - Q&A functionality ✅
+   - AWS Knowledge MCP integration ✅
+   - Caching strategy ❌ (not implemented)
+   - Frontend components ✅
+   - **Note**: Uses HTTP streaming instead of WebSocket, API endpoint is `/brainstorm` not `/api/brainstorm/query`
 
-4. **[04-analyze-mode.md](./04-analyze-mode.md)**
-   - Architecture analysis
-   - Multiple options generation
-   - Diagram generation
-   - Cost estimation
+4. **[04-analyze-mode.md](./04-analyze-mode.md)** ✅ **Implemented (Simplified)**
+   - Architecture analysis ✅
+   - Multiple options generation ❌ (single analysis instead of Good/Better/Best)
+   - Diagram generation ✅
+   - Cost estimation ✅
+   - **Note**: API endpoint is `/analyze-requirements` not `/api/analyze/run`
 
-5. **[05-implement-mode.md](./05-implement-mode.md)**
-   - Artifact generation
-   - All 6 MCP servers integration
-   - Security scanning
-   - Read-only enforcement
+5. **[05-implement-mode.md](./05-implement-mode.md)** ✅ **Implemented as "Generate Mode"**
+   - Artifact generation ✅
+   - MCP servers integration ✅ (CFN, Diagram, Pricing)
+   - Security scanning ❌ (not implemented)
+   - Read-only enforcement ✅
+   - **Note**: Mode name is "Generate" not "Implement", API endpoint is `/generate` not `/api/implement/generate`
 
 ### Data & Features
 
-6. **[06-conversation-history-resume.md](./06-conversation-history-resume.md)**
-   - Conversation persistence
-   - Search functionality
-   - Resume capability
-   - Export functionality
+6. **[06-conversation-history-resume.md](./06-conversation-history-resume.md)** ⚠️ **Not Implemented**
+   - Conversation persistence ❌
+   - Search functionality ❌
+   - Resume capability ❌
+   - Export functionality ❌
 
-7. **[07-artifact-management.md](./07-artifact-management.md)**
-   - S3 storage structure
-   - Download functionality
-   - Bundle generation
-   - Access control
+7. **[07-artifact-management.md](./07-artifact-management.md)** ⚠️ **Partially Implemented**
+   - S3 storage structure ❌ (downloads only, no persistence)
+   - Download functionality ✅ (individual files)
+   - Bundle generation ❌ (ZIP not implemented)
+   - Access control ❌ (no auth)
 
 ### Operations
 
-8. **[08-admin-portal.md](./08-admin-portal.md)**
-   - User management
-   - Organization management
-   - Subscription management
-   - Business analytics
+8. **[08-admin-portal.md](./08-admin-portal.md)** ⚠️ **Not Implemented**
+   - User management ❌
+   - Organization management ❌
+   - Subscription management ❌
+   - Business analytics ❌
 
-9. **[09-monitoring-dashboard.md](./09-monitoring-dashboard.md)**
-   - System health monitoring
-   - Performance metrics
-   - Cost monitoring
-   - Error tracking
+9. **[09-monitoring-dashboard.md](./09-monitoring-dashboard.md)** ⚠️ **Partially Implemented**
+   - System health monitoring ✅ (basic `/health` endpoint)
+   - Performance metrics ✅ (basic `/metrics` endpoint)
+   - Cost monitoring ❌
+   - Error tracking ✅ (logging only)
 
 ### Infrastructure & Security
 
-10. **[10-infrastructure-deployment.md](./10-infrastructure-deployment.md)**
-    - AWS CloudFormation templates
-    - Deployment process
-    - Monitoring setup
-    - Backup strategy
+10. **[10-infrastructure-deployment.md](./10-infrastructure-deployment.md)** ⚠️ **Not Implemented**
+    - AWS CloudFormation templates ❌
+    - Deployment process ❌ (local dev only)
+    - Monitoring setup ❌
+    - Backup strategy ❌
 
-11. **[11-landing-page.md](./11-landing-page.md)**
-    - Marketing landing page
-    - SEO optimization
-    - Conversion optimization
-    - Content structure
+11. **[11-landing-page.md](./11-landing-page.md)** ⚠️ **Not Implemented**
+    - Marketing landing page ❌
+    - SEO optimization ❌
+    - Conversion optimization ❌
+    - Content structure ❌
 
-12. **[12-security-compliance.md](./12-security-compliance.md)**
-    - Security architecture
-    - Read-only enforcement
-    - Data protection
-    - Compliance (GDPR, SOC2)
+12. **[12-security-compliance.md](./12-security-compliance.md)** ⚠️ **Partially Implemented**
+    - Security architecture ✅ (read-only operations)
+    - Read-only enforcement ✅
+    - Data protection ⚠️ (basic, no PII handling)
+    - Compliance (GDPR, SOC2) ❌
 
 13. **[13-product-ui-transformation.md](./13-product-ui-transformation.md)**
     - Rocket.new-inspired UI transformation

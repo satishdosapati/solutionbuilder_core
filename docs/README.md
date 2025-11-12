@@ -1,10 +1,20 @@
 # Design Documents & Backlog
 
-Complete design documentation for AWS Cloud Architecture Generation SaaS Platform.
+Complete design documentation for **Archai** - AWS Cloud Architecture Generation SaaS Platform.
 
-## 📚 Design Documents (Implementation Ready)
+## ⚠️ Implementation Status
 
-All design documents are located in `docs/design/` and are ready for full implementation:
+**Important**: These design documents describe the **target architecture** for a full SaaS platform. The current implementation is a **simplified MVP** focused on the core three modes (Brainstorm, Analyze, Generate).
+
+**Current Implementation Status:**
+- ✅ **Implemented**: Three modes (simplified versions), mode-based MCP orchestration
+- ❌ **Not Implemented**: Authentication, database, artifact persistence, admin features
+
+**See**: [`../IMPLEMENTATION_STATUS.md`](../IMPLEMENTATION_STATUS.md) for detailed status of what's implemented vs. planned.
+
+## 📚 Design Documents
+
+All design documents are located in `docs/design/` and describe the target architecture:
 
 ### Core Documents
 
@@ -55,23 +65,31 @@ Future enhancements for post-launch development:
 
 ## 📊 Implementation Phases
 
-### Phase 1: MVP (Weeks 1-4)
-- Core architecture setup
-- Authentication (Google OAuth)
-- Brainstorm mode
-- Basic artifact downloads
-- Security enforcement
+### ✅ Phase 0: Current MVP (Completed)
+- ✅ Core architecture setup (simplified)
+- ✅ Brainstorm mode
+- ✅ Analyze mode  
+- ✅ Generate mode (formerly "Implement")
+- ✅ Basic artifact downloads
+- ✅ Security enforcement (read-only)
 
-### Phase 2: Core Features (Weeks 5-8)
-- Analyze mode
-- Implement mode
-- Conversation history
-- Admin portal (basic)
+### 🚧 Phase 1: Foundation (In Progress / Planned)
+- ❌ Authentication (Google OAuth)
+- ❌ Database setup (PostgreSQL)
+- ❌ Multi-tenant architecture
+- ❌ Conversation persistence
 
-### Phase 3: Polish (Weeks 9-12)
-- Monitoring dashboard
-- Landing page
-- Performance optimization
+### 📋 Phase 2: Core Features (Planned)
+- ❌ Enhanced artifact management (ZIP bundles)
+- ❌ Conversation history & search
+- ❌ Admin portal (basic)
+- ❌ Enhanced monitoring
+
+### 📋 Phase 3: Polish (Planned)
+- ❌ Monitoring dashboard
+- ❌ Landing page
+- ❌ Performance optimization
+- ❌ Production deployment
 
 ## ✅ Document Checklist
 
@@ -85,16 +103,16 @@ Each design document includes:
 - ✅ Testing requirements
 - ✅ Implementation checklist
 
-## 🎯 Key Features Covered
+## 🎯 Key Features Covered (Target Architecture)
 
-- **Three UI Modes**: Brainstorm, Analyze, Implement
-- **Multi-tenant Architecture**: Organization-scoped data
-- **Security**: Read-only operations, no resource mutations
-- **MCP Integration**: 6 AWS MCP servers
-- **Conversation Management**: Save, search, resume
-- **Artifact Downloads**: Individual files + ZIP bundles
-- **Admin Tools**: User management, analytics, monitoring
-- **Cost-Optimized**: AWS Free Tier deployment
+- **Three UI Modes**: Brainstorm, Analyze, Generate (✅ Implemented)
+- **Multi-tenant Architecture**: Organization-scoped data (❌ Not Implemented)
+- **Security**: Read-only operations, no resource mutations (✅ Implemented)
+- **MCP Integration**: Multiple AWS MCP servers (✅ Implemented, mode-based)
+- **Conversation Management**: Save, search, resume (❌ Not Implemented)
+- **Artifact Downloads**: Individual files + ZIP bundles (⚠️ Individual files only)
+- **Admin Tools**: User management, analytics, monitoring (❌ Not Implemented)
+- **Cost-Optimized**: AWS Free Tier deployment (❌ Local dev only)
 
 ## 📖 How to Use These Documents
 
@@ -111,4 +129,11 @@ Each design document includes:
 
 ---
 
-**All design documents are ready for full implementation. Start with the index (00-index.md) and proceed sequentially.**
+## 📝 Notes
+
+- **Current Implementation**: See [`../IMPLEMENTATION_STATUS.md`](../IMPLEMENTATION_STATUS.md) for what's actually implemented
+- **Design Documents**: Describe target architecture, not current MVP
+- **API Endpoints**: Current endpoints differ from design docs (see implementation status)
+- **Mode Names**: Design docs use "Implement Mode", implementation uses "Generate Mode"
+
+**Start with**: [`design/00-index.md`](./design/00-index.md) for navigation, then check [`../IMPLEMENTATION_STATUS.md`](../IMPLEMENTATION_STATUS.md) to see what's implemented.

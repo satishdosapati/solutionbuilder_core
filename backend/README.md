@@ -1,6 +1,6 @@
-# Backend - AWS Solution Architect Tool
+# Backend - Archai AWS Solution Architect Tool
 
-FastAPI + Python implementation providing role-based MCP server orchestration, Strands agents integration, and REST API endpoints for CloudFormation template generation, architecture diagrams, and cost estimation services.
+FastAPI + Python implementation providing mode-based MCP server orchestration, Strands agents integration, and REST API endpoints for CloudFormation template generation, architecture diagrams, and cost estimation services.
 
 ## ⚠️ Python Version Compatibility
 
@@ -53,14 +53,24 @@ uvicorn main:app --host 0.0.0.0 --port 8000 --no-reload
 
 ### API Endpoints
 
-- `GET /` - Health check
-- `GET /roles` - List available AWS Solution Architect roles
-- `POST /brainstorm` - AWS knowledge access for brainstorming
-- `POST /analyze-requirements` - Enhanced requirements analysis
-- `POST /generate` - Generate CloudFormation templates, diagrams, and cost estimates
-- `POST /follow-up` - Handle follow-up questions
-- `POST /stream-response` - Stream responses
-- `GET /health` - Health check
+**Core Endpoints:**
+- `GET /` - API root and version info
+- `GET /health` - Health check endpoint
+- `GET /roles` - List available AWS Solution Architect roles (legacy, for reference)
+- `POST /roles/mcp-servers` - Get MCP servers for selected roles (legacy)
+
+**Mode Endpoints:**
+- `POST /brainstorm` - AWS knowledge access for brainstorming mode
+- `POST /analyze-requirements` - Enhanced requirements analysis for analyze mode
+- `POST /generate` - Generate CloudFormation templates, diagrams, and cost estimates for generate mode
+- `POST /follow-up` - Handle follow-up questions with conversation context
+
+**Streaming Endpoints:**
+- `POST /stream-response` - Stream brainstorm responses
+- `POST /stream-analyze` - Stream analyze responses
+
+**Monitoring:**
+- `GET /metrics` - Application metrics
 
 ## 🐛 Troubleshooting
 
