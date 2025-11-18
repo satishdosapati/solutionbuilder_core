@@ -28,7 +28,26 @@
 - Node.js 18+
 - AWS Bedrock access (or Anthropic API key)
 
-### Setup
+### Running on Replit
+
+The application is pre-configured for Replit and will start automatically:
+
+1. **Configure Environment Variables**:
+   - Edit `backend/.env` with your AWS credentials
+   - Set AWS_ACCESS_KEY_ID, AWS_SECRET_ACCESS_KEY, AWS_REGION
+   - Optionally set ANTHROPIC_API_KEY as fallback
+
+2. **Access the Application**:
+   - Frontend is available through Replit's webview (automatically opens)
+   - Backend API: Check the backend workflow console for port info
+   - API Docs: Add `/docs` to your Replit domain URL
+
+3. **Workflows**:
+   - Both frontend and backend start automatically
+   - Frontend runs on port 5000 (webview)
+   - Backend runs on port 8000 (console)
+
+### Local Setup
 ```bash
 # Clone and setup
 git clone <repository>
@@ -41,17 +60,24 @@ run_dev.bat
 ./run_dev.sh
 ```
 
-### Access
-- **Frontend**: http://localhost:3000
+### Access (Local)
+- **Frontend**: http://localhost:5000
 - **Backend API**: http://localhost:8000
 - **API Docs**: http://localhost:8000/docs
 
 ## 🔧 Configuration
 
-1. **AWS Credentials**: Configure AWS CLI with Bedrock access
-2. **Environment Variables**: Copy `backend/env.example` to `backend/.env` and update
+1. **AWS Credentials**: Configure AWS CLI with Bedrock access, or set directly in `backend/.env`
+2. **Environment Variables**: 
+   - On Replit: Edit `backend/.env` directly (already created from template)
+   - Locally: Copy `backend/env.example` to `backend/.env` and update
 3. **MCP Servers**: Automatically configured based on selected mode (see `backend/config/mode_servers.json`)
 4. **Performance**: MCP servers are pre-installed locally for faster startup (see `backend/MCP_PERFORMANCE_IMPROVEMENTS.md`)
+
+### Replit-Specific Notes
+- Frontend configured to run on port 5000 (Replit's webview port)
+- API communication uses proxy (`/api`) to avoid CORS issues
+- Both workflows start automatically when you open the Repl
 
 ## 📚 Documentation
 

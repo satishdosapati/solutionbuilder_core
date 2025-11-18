@@ -1,7 +1,7 @@
 import axios from 'axios';
 import { GenerationRequest, GenerationResponse, FollowUpRequest } from '../types';
 
-const API_BASE_URL = 'http://localhost:8000';
+const API_BASE_URL = '/api';
 
 const api = axios.create({
   baseURL: API_BASE_URL,
@@ -100,7 +100,7 @@ export const apiService = {
   async brainstormKnowledgeStream(request: GenerationRequest, onChunk: (chunk: string) => void) {
     try {
       console.log('Starting streaming request to:', `${API_BASE_URL}/stream-response`);
-      const response = await fetch(`${API_BASE_URL}/stream-response`, {
+      const response = await fetch('/api/stream-response', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -197,7 +197,7 @@ export const apiService = {
   async analyzeRequirementsStream(request: GenerationRequest, onChunk: (chunk: { type: string; content?: string; diagram?: string; follow_up_questions?: string[]; error?: string }) => void) {
     try {
       console.log('Starting streaming analyze request to:', `${API_BASE_URL}/stream-analyze`);
-      const response = await fetch(`${API_BASE_URL}/stream-analyze`, {
+      const response = await fetch('/api/stream-analyze', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -301,7 +301,7 @@ export const apiService = {
   async generateArchitectureStream(request: GenerationRequest, onChunk: (chunk: { type: string; content?: string; cloudformation?: string; diagram?: string; cost_estimate?: any; error?: string }) => void) {
     try {
       console.log('Starting streaming generate request to:', `${API_BASE_URL}/stream-generate`);
-      const response = await fetch(`${API_BASE_URL}/stream-generate`, {
+      const response = await fetch('/api/stream-generate', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
