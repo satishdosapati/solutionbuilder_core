@@ -1,12 +1,12 @@
 import React from 'react';
 
-interface ArchaiLogoProps {
+interface NebulaLogoProps {
   size?: 'sm' | 'md' | 'lg';
   showText?: boolean;
   className?: string;
 }
 
-const ArchaiLogo: React.FC<ArchaiLogoProps> = ({ 
+const NebulaLogo: React.FC<NebulaLogoProps> = ({ 
   size = 'md', 
   showText = true, 
   className = '' 
@@ -50,4 +50,4 @@ const ArchaiLogo: React.FC<ArchaiLogoProps> = ({
   );
 };
 
-export default ArchaiLogo;
+export default NebulaLogo;

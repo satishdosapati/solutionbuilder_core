@@ -3,7 +3,7 @@ import { apiService } from './services/api';
 import { ChatMessage, ConversationContext, ConversationState, ActionButton } from './types';
 import ChatInterface from './components/ChatInterface';
 import ThemeToggle from './components/ThemeToggle';
-import ArchaiLogo from './components/ArchaiLogo';
+import NebulaLogo from './components/NebulaLogo';
 import EnhancedAnalysisDisplay from './components/EnhancedAnalysisDisplay';
 import GenerateOutputDisplay from './components/GenerateOutputDisplay';
 
@@ -885,7 +885,7 @@ function App() {
         <div className="max-w-full px-6 py-3">
           <div className="flex justify-between items-center">
             <div className="flex items-center gap-3">
-              <ArchaiLogo size="md" showText={true} />
+              <NebulaLogo size="md" showText={true} />
               <div className="hidden lg:flex items-center">
                 <span className="text-gray-300 dark:text-gray-700 mx-3">|</span>
                 <p className="text-xs text-gray-500 dark:text-gray-400 font-medium">
