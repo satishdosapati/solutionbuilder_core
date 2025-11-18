@@ -29,25 +29,25 @@ const MessageBubble: React.FC<MessageBubbleProps> = ({ message, onActionClick })
   };
 
   return (
-    <div className={`flex ${isUser ? 'justify-end' : 'justify-start'} mb-4`}>
-      <div className={`max-w-[80%] ${isUser ? 'order-2' : 'order-1'}`}>
+    <div className={`flex ${isUser ? 'justify-end' : 'justify-start'} animate-fade-in`}>
+      <div className={`max-w-[85%] ${isUser ? 'order-2' : 'order-1'}`}>
         {/* Message Header */}
-        <div className={`flex items-center space-x-2 mb-1 ${isUser ? 'justify-end' : 'justify-start'}`}>
+        <div className={`flex items-center gap-2 mb-1.5 ${isUser ? 'justify-end' : 'justify-start'}`}>
           {!isUser && message.mode && (
-            <span className={`text-xs px-2 py-1 rounded-full ${getModeColorClasses(message.mode)}`}>
+            <span className={`text-xs px-2.5 py-1 rounded-full font-medium ${getModeColorClasses(message.mode)}`}>
               {getModeIcon(message.mode)} {message.mode}
             </span>
           )}
-          <span className="text-xs text-gray-500 dark:text-gray-400">
+          <span className="text-xs text-gray-400 dark:text-gray-600">
             {message.timestamp.toLocaleTimeString()}
           </span>
         </div>
 
         {/* Message Content */}
-        <div className={`rounded-lg px-4 py-3 ${
+        <div className={`rounded-xl px-4 py-3 ${
           isUser 
-            ? 'bg-blue-600 text-white' 
-            : 'bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 shadow-sm'
+            ? 'bg-gradient-to-r from-blue-600 to-blue-500 text-white shadow-medium' 
+            : 'bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 shadow-soft'
         }`}>
           {/* Enhanced Analysis Display for analyze mode */}
           {!isUser && message.mode === 'analyze' && message.context?.enhanced_analysis ? (
@@ -152,20 +152,23 @@ const MessageBubble: React.FC<MessageBubbleProps> = ({ message, onActionClick })
 
         {/* Action Buttons */}
         {message.context?.actions && message.context.actions.length > 0 && (
-          <div className="mt-2 flex flex-wrap gap-2">
+          <div className="mt-3 flex flex-wrap gap-2">
             {message.context.actions.map((action, index) => (
               <button
                 key={index}
                 onClick={() => onActionClick?.(action.action)}
-                className={`px-3 py-1 text-xs rounded-full border transition-colors ${
-                  action.color === 'blue' 
-                    ? 'border-blue-200 bg-blue-50 text-blue-700 hover:bg-blue-100'
+                className={`
+                  px-3 py-1.5 text-xs font-medium rounded-lg 
+                  transition-all duration-200 shadow-soft hover:shadow-medium
+                  ${action.color === 'blue' 
+                    ? 'bg-blue-50 dark:bg-blue-950/50 text-blue-700 dark:text-blue-300 hover:bg-blue-100 dark:hover:bg-blue-900/50 border border-blue-200 dark:border-blue-800'
                     : action.color === 'green'
-                    ? 'border-green-200 bg-green-50 text-green-700 hover:bg-green-100'
+                    ? 'bg-green-50 dark:bg-green-950/50 text-green-700 dark:text-green-300 hover:bg-green-100 dark:hover:bg-green-900/50 border border-green-200 dark:border-green-800'
                     : action.color === 'orange'
-                    ? 'border-orange-200 bg-orange-50 text-orange-700 hover:bg-orange-100'
-                    : 'border-gray-200 bg-gray-50 text-gray-700 hover:bg-gray-100'
-                }`}
+                    ? 'bg-orange-50 dark:bg-orange-950/50 text-orange-700 dark:text-orange-300 hover:bg-orange-100 dark:hover:bg-orange-900/50 border border-orange-200 dark:border-orange-800'
+                    : 'bg-gray-50 dark:bg-gray-900 text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-800 border border-gray-200 dark:border-gray-700'
+                  }
+                `}
               >
                 {action.icon && <span className="mr-1">{action.icon}</span>}
                 {action.label}
@@ -176,16 +179,24 @@ const MessageBubble: React.FC<MessageBubbleProps> = ({ message, onActionClick })
 
         {/* Follow-up Questions */}
         {message.context?.follow_up_questions && message.context.follow_up_questions.length > 0 && (
-          <div className="mt-3 p-3 bg-blue-50 dark:bg-blue-900 rounded-lg">
-            <p className="text-sm font-medium text-blue-800 dark:text-blue-200 mb-2">
+          <div className="mt-3 p-3.5 bg-gradient-to-br from-blue-50 to-cyan-50 dark:from-blue-950/30 dark:to-cyan-950/30 rounded-xl border border-blue-200 dark:border-blue-800">
+            <p className="text-sm font-semibold text-blue-800 dark:text-blue-200 mb-2.5">
               💡 Follow-up questions to explore:
             </p>
-            <div className="space-y-2">
+            <div className="space-y-1.5">
               {message.context.follow_up_questions.map((question: string, index: number) => (
                 <button
                   key={index}
                   onClick={() => onActionClick?.(question)}
-                  className="block w-full text-left text-sm text-blue-700 dark:text-blue-300 hover:text-blue-900 dark:hover:text-blue-100 hover:bg-blue-100 dark:hover:bg-blue-800 p-2 rounded transition-colors"
+                  className="
+                    block w-full text-left text-sm 
+                    text-blue-700 dark:text-blue-300 
+                    hover:text-blue-900 dark:hover:text-blue-100 
+                    bg-white/50 dark:bg-gray-900/30
+                    hover:bg-blue-100/80 dark:hover:bg-blue-900/40 
+                    p-2.5 rounded-lg transition-all
+                    border border-transparent hover:border-blue-300 dark:hover:border-blue-700
+                  "
                 >
                   {question}
                 </button>
@@ -196,14 +207,14 @@ const MessageBubble: React.FC<MessageBubbleProps> = ({ message, onActionClick })
 
         {/* Suggestions */}
         {message.context?.suggestions && message.context.suggestions.length > 0 && (
-          <div className="mt-2">
-            <p className="text-xs text-gray-500 dark:text-gray-400 mb-1">Suggestions:</p>
-            <div className="flex flex-wrap gap-1">
+          <div className="mt-3">
+            <p className="text-xs font-medium text-gray-500 dark:text-gray-400 mb-2">Quick suggestions:</p>
+            <div className="flex flex-wrap gap-2">
               {message.context.suggestions.map((suggestion, index) => (
                 <button
                   key={index}
                   onClick={() => onActionClick?.(suggestion)}
-                  className="text-xs text-blue-600 dark:text-blue-400 hover:text-blue-800 dark:hover:text-blue-300 underline"
+                  className="text-xs text-blue-600 dark:text-blue-400 hover:text-blue-800 dark:hover:text-blue-300 underline underline-offset-2 transition-colors"
                 >
                   {suggestion}
                 </button>

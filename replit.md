@@ -1,9 +1,19 @@
-# Archai - AWS Solution Architect Tool
+# Nebula.AI - AWS Solution Architect Tool
 
-**Project Status**: Successfully imported and configured for Replit environment
+**Project Status**: Successfully imported and configured for Replit environment with modern UI redesign
 
 ## Overview
-Archai is an AI-powered AWS Solution Architect tool that helps cloud engineers design, validate, and deploy enterprise-grade AWS solutions. It uses Strands Agents with AWS MCP (Model Context Protocol) servers to provide intelligent architecture recommendations.
+Nebula.AI is an AI-powered AWS Solution Architect tool that helps cloud engineers design, validate, and deploy enterprise-grade AWS solutions. It uses Strands Agents with AWS MCP (Model Context Protocol) servers to provide intelligent architecture recommendations.
+
+## UI Redesign (Latest Update)
+The interface has been completely redesigned with a modern, minimalistic aesthetic inspired by Linear, Vercel, OpenAI, and Notion:
+- **Modern Design System**: Gradients, refined shadows, Inter font, smooth animations
+- **Compact Header**: Clean alignment with Nebula.AI branding and tagline
+- **Pill-Style Mode Selector**: Gradient active states with smooth transitions
+- **Feature Cards**: Gradient backgrounds for empty states
+- **Auto-Resize Input**: Modern floating input bar with gradient send button
+- **Sleek Messages**: Better shadows, tighter spacing, refined action buttons
+- **Smooth Theme Toggle**: Animated transitions between light/dark modes
 
 ## Architecture
 - **Frontend**: React + TypeScript + Vite (Port 5000)

@@ -879,16 +879,17 @@ function App() {
   };
 
   return (
-    <div className="h-screen bg-gray-100 dark:bg-gray-800 flex flex-col">
-      {/* Header */}
-      <header className="bg-white dark:bg-archai-background shadow-sm border-b border-gray-200 dark:border-gray-700">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4">
+    <div className="h-screen bg-gray-50 dark:bg-gray-950 flex flex-col">
+      {/* Modern Compact Header */}
+      <header className="bg-white dark:bg-gray-900 border-b border-gray-200 dark:border-gray-800 shadow-soft">
+        <div className="max-w-full px-6 py-3">
           <div className="flex justify-between items-center">
-            <div className="flex items-center gap-4">
+            <div className="flex items-center gap-3">
               <ArchaiLogo size="md" showText={true} />
-              <div className="hidden md:block">
-                <p className="text-sm text-gray-600 dark:text-gray-400 italic font-body">
-                  The Intelligent AI Co-Architect for Your Cloud Journey
+              <div className="hidden lg:flex items-center">
+                <span className="text-gray-300 dark:text-gray-700 mx-3">|</span>
+                <p className="text-xs text-gray-500 dark:text-gray-400 font-medium">
+                  AI-Powered AWS Solution Architecture
                 </p>
               </div>
             </div>

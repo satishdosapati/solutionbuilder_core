@@ -12,40 +12,43 @@ const ModeSelector: React.FC<ModeSelectorProps> = ({ currentMode, onModeChange, 
       key: 'brainstorm' as const, 
       label: 'Brainstorm', 
       icon: '🧠', 
-      color: 'brainstorm',
-      description: 'Think faster with AI-powered insights'
+      gradient: 'from-pink-500 to-rose-500'
     },
     { 
       key: 'analyze' as const, 
       label: 'Analyze', 
       icon: '🔍', 
-      color: 'analyze',
-      description: 'Build safer with comprehensive analysis'
+      gradient: 'from-blue-500 to-cyan-500'
     },
     { 
       key: 'generate' as const, 
       label: 'Generate', 
       icon: '⚡', 
-      color: 'generate',
-      description: 'Deploy smarter with automated generation'
+      gradient: 'from-emerald-500 to-teal-500'
     }
   ];
 
   return (
-    <div className="flex space-x-2">
+    <div className="inline-flex items-center gap-1 p-1 bg-gray-100 dark:bg-gray-800 rounded-xl shadow-soft">
       {modes.map((mode) => (
         <button
           key={mode.key}
           onClick={() => onModeChange(mode.key)}
           disabled={disabled}
-          className={`px-3 py-2 rounded-lg text-sm font-medium transition-all ${
-            currentMode === mode.key
-              ? `bg-${mode.color}-500 text-white shadow-sm`
-              : 'bg-gray-100 text-gray-700 hover:bg-gray-200 dark:bg-gray-800 dark:text-gray-300 dark:hover:bg-gray-700'
-          } ${disabled ? 'opacity-50 cursor-not-allowed' : 'cursor-pointer'}`}
+          className={`
+            relative px-4 py-2 rounded-lg text-sm font-semibold
+            transition-all duration-300 ease-out
+            ${currentMode === mode.key
+              ? `bg-gradient-to-r ${mode.gradient} text-white shadow-medium scale-105`
+              : 'text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-gray-200 hover:bg-white dark:hover:bg-gray-700'
+            }
+            ${disabled ? 'opacity-50 cursor-not-allowed' : 'cursor-pointer'}
+          `}
         >
-          <span className="mr-1">{mode.icon}</span>
-          {mode.label}
+          <span className="flex items-center gap-1.5">
+            <span className="text-base">{mode.icon}</span>
+            <span>{mode.label}</span>
+          </span>
         </button>
       ))}
     </div>
