@@ -9,11 +9,14 @@ Nebula.AI is an AI-powered AWS Solution Architect tool that helps cloud engineer
 The interface has been completely redesigned with a modern, minimalistic aesthetic inspired by Linear, Vercel, OpenAI, and Notion:
 - **Modern Design System**: Gradients, refined shadows, Inter font, smooth animations
 - **Compact Header**: Clean alignment with Nebula.AI branding and "Intelligent AI Co-Architect for your cloud journey" tagline
-- **Pill-Style Mode Selector**: Gradient active states with smooth transitions
-- **Feature Cards**: Gradient backgrounds for empty states
+- **Pill-Style Navigation**: Modern pill-style tabs across mode selector and output panels with gradient active states
+- **Feature Cards**: Gradient backgrounds for empty states in all modes
 - **Auto-Resize Input**: Modern floating input bar with gradient send button
 - **Sleek Messages**: Better shadows, tighter spacing, refined action buttons
+- **Gradient Buttons**: All download and action buttons use consistent gradient styling
+- **Output Panels**: Unified design with gradient headers and modern pill-style tabs
 - **Smooth Theme Toggle**: Animated transitions between light/dark modes
+- **Consistent Dark Mode**: Unified styling across all components in both light and dark themes
 
 ## Architecture
 - **Frontend**: React + TypeScript + Vite (Port 5000)
