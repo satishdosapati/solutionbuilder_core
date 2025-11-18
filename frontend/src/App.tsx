@@ -889,7 +889,7 @@ function App() {
               <div className="hidden lg:flex items-center">
                 <span className="text-gray-300 dark:text-gray-700 mx-3">|</span>
                 <p className="text-xs text-gray-500 dark:text-gray-400 font-medium">
-                  AI-Powered AWS Solution Architecture
+                  Intelligent AI Co-Architect for your cloud journey
                 </p>
               </div>
             </div>
