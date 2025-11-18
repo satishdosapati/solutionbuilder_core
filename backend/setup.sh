@@ -12,8 +12,18 @@ source venv/bin/activate || source venv/Scripts/activate
 # Install dependencies
 pip install -r requirements.txt
 
-# Install uvx for MCP server management
+# Install uv for MCP server management
 pip install uv
+
+# Install MCP servers locally for better performance
+echo ""
+echo "Installing MCP servers locally (this improves startup performance)..."
+if [ -f "install_mcp_servers.sh" ]; then
+    bash install_mcp_servers.sh
+else
+    echo "Warning: install_mcp_servers.sh not found, skipping MCP server installation"
+    echo "You can install them manually later by running: bash install_mcp_servers.sh"
+fi
 
 # Create .env file if it doesn't exist
 if [ ! -f ".env" ]; then

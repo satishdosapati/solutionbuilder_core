@@ -51,6 +51,7 @@ run_dev.bat
 1. **AWS Credentials**: Configure AWS CLI with Bedrock access
 2. **Environment Variables**: Copy `backend/env.example` to `backend/.env` and update
 3. **MCP Servers**: Automatically configured based on selected mode (see `backend/config/mode_servers.json`)
+4. **Performance**: MCP servers are pre-installed locally for faster startup (see `backend/MCP_PERFORMANCE_IMPROVEMENTS.md`)
 
 ## 📚 Documentation
 

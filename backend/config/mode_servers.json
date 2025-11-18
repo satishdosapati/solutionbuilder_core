@@ -3,9 +3,13 @@
     "servers": [
       {
         "name": "aws-knowledge-server",
-        "type": "stdio",
-        "command": "uvx",
-        "args": ["fastmcp", "run", "https://knowledge-mcp.global.api.aws"]
+        "type": "http",
+        "url": "https://knowledge-mcp.global.api.aws",
+        "fallback": {
+          "type": "stdio",
+          "command": "uvx",
+          "args": ["fastmcp", "run", "https://knowledge-mcp.global.api.aws"]
+        }
       }
     ]
   },
@@ -13,15 +17,23 @@
     "servers": [
       {
         "name": "aws-knowledge-server",
-        "type": "stdio",
-        "command": "uvx",
-        "args": ["fastmcp", "run", "https://knowledge-mcp.global.api.aws"]
+        "type": "http",
+        "url": "https://knowledge-mcp.global.api.aws",
+        "fallback": {
+          "type": "stdio",
+          "command": "uvx",
+          "args": ["fastmcp", "run", "https://knowledge-mcp.global.api.aws"]
+        }
       },
       {
         "name": "aws-diagram-server",
         "type": "stdio",
-        "command": "uvx",
-        "args": ["--from", "awslabs.aws-diagram-mcp-server@latest", "awslabs.aws-diagram-mcp-server.exe"]
+        "command": "awslabs.aws-diagram-mcp-server.exe",
+        "args": [],
+        "fallback": {
+          "command": "uvx",
+          "args": ["--from", "awslabs.aws-diagram-mcp-server@latest", "awslabs.aws-diagram-mcp-server.exe"]
+        }
       }
     ]
   },
@@ -30,20 +42,32 @@
       {
         "name": "cfn-server",
         "type": "stdio",
-        "command": "uvx",
-        "args": ["--from", "awslabs.cfn-mcp-server@latest", "awslabs.cfn-mcp-server.exe"]
+        "command": "awslabs.cfn-mcp-server.exe",
+        "args": [],
+        "fallback": {
+          "command": "uvx",
+          "args": ["--from", "awslabs.cfn-mcp-server@latest", "awslabs.cfn-mcp-server.exe"]
+        }
       },
       {
         "name": "aws-diagram-server",
         "type": "stdio",
-        "command": "uvx",
-        "args": ["--from", "awslabs.aws-diagram-mcp-server@latest", "awslabs.aws-diagram-mcp-server.exe"]
+        "command": "awslabs.aws-diagram-mcp-server.exe",
+        "args": [],
+        "fallback": {
+          "command": "uvx",
+          "args": ["--from", "awslabs.aws-diagram-mcp-server@latest", "awslabs.aws-diagram-mcp-server.exe"]
+        }
       },
       {
         "name": "aws-pricing-server",
         "type": "stdio",
-        "command": "uvx",
-        "args": ["--from", "awslabs.aws-pricing-mcp-server@latest", "awslabs.aws-pricing-mcp-server.exe"]
+        "command": "awslabs.aws-pricing-mcp-server.exe",
+        "args": [],
+        "fallback": {
+          "command": "uvx",
+          "args": ["--from", "awslabs.aws-pricing-mcp-server@latest", "awslabs.aws-pricing-mcp-server.exe"]
+        }
       }
     ]
   }

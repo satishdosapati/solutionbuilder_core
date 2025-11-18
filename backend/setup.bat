@@ -15,6 +15,16 @@ pip install -r requirements.txt
 REM Install uv for MCP server management
 pip install uv
 
+REM Install MCP servers locally for better performance
+echo.
+echo Installing MCP servers locally (this improves startup performance)...
+if exist "install_mcp_servers.bat" (
+    call install_mcp_servers.bat
+) else (
+    echo Warning: install_mcp_servers.bat not found, skipping MCP server installation
+    echo You can install them manually later by running: install_mcp_servers.bat
+)
+
 REM Create .env file if it doesn't exist
 if not exist ".env" (
     echo Creating .env file from template...

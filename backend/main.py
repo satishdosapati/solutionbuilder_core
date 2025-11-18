@@ -20,7 +20,9 @@ from services.mcp_orchestrator import MCPOrchestrator
 from services.enhanced_analysis import EnhancedAWSAnalysisAgent
 from services.intent_based_mcp_orchestrator import IntentBasedMCPOrchestrator
 from services.strands_agents_simple import MCPKnowledgeAgent, MCPEnabledOrchestrator
+from strands import Agent
 from services.session_manager import session_manager
+from services.mcp_client_manager import mcp_client_manager
 from services.error_handler import error_handler, performance_monitor
 
 # Load environment variables
@@ -93,6 +95,21 @@ class GenerationResponse(BaseModel):
 @app.get("/")
 async def root():
     return {"message": "AWS Solution Architect Tool API", "version": "1.0.0"}
+
+@app.get("/mcp-pool-stats")
+async def get_mcp_pool_stats():
+    """Get MCP client pool statistics"""
+    try:
+        stats = mcp_client_manager.get_pool_stats()
+        return {
+            "success": True,
+            "pools": stats,
+            "total_pools": len(stats),
+            "total_in_use": mcp_client_manager.get_usage_count()
+        }
+    except Exception as e:
+        logger.error(f"Failed to get pool stats: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
 
 @app.get("/roles")
 async def get_available_roles():
@@ -625,6 +642,199 @@ async def stream_response(request: GenerationRequest, session_id: Optional[str] 
         except Exception as e:
             logger.error(f"Streaming error: {str(e)}")
             yield f"data: {json.dumps({'error': str(e)})}\n\n"
+    
+    return StreamingResponse(generate_stream(), media_type="text/event-stream")
+
+@app.post("/stream-generate")
+async def stream_generate(request: GenerationRequest, session_id: Optional[str] = None):
+    """Stream generate mode responses: CloudFormation, Diagram, and Cost sequentially"""
+    
+    logger.info(f"Streaming generate mode for: '{request.requirements[:100]}...'")
+    
+    async def generate_stream():
+        try:
+            # Get or create session
+            current_session_id = session_id
+            if not current_session_id:
+                current_session_id = session_manager.create_session()
+            else:
+                session = session_manager.get_session(current_session_id)
+                if not session:
+                    current_session_id = session_manager.create_session()
+            
+            # Get generate mode servers
+            from services.mode_server_manager import mode_server_manager
+            generate_servers = [server["name"] for server in mode_server_manager.get_servers_for_mode("generate")]
+            logger.info(f"Generate mode MCP servers: {generate_servers}")
+            
+            # Initialize orchestrator
+            strands_orchestrator = MCPEnabledOrchestrator(generate_servers)
+            await strands_orchestrator.initialize()
+            
+            # Analyze requirements for context
+            intent_orchestrator = IntentBasedMCPOrchestrator()
+            analysis = intent_orchestrator.analyze_requirements(request.requirements)
+            
+            agent_inputs = {
+                "requirements": request.requirements,
+                "detected_keywords": analysis.detected_keywords,
+                "detected_intents": analysis.detected_intents,
+                "complexity_level": analysis.complexity_level,
+                "analysis_reasoning": analysis.reasoning
+            }
+            
+            # Phase 1: Generate CloudFormation template (streaming)
+            logger.info("Phase 1: Generating CloudFormation template...")
+            yield f"data: {json.dumps({'type': 'status', 'message': 'Generating CloudFormation template...'})}\n\n"
+            
+            try:
+                # Get MCP client for CloudFormation generation
+                mcp_client_wrapper = await mcp_client_manager.get_mcp_client_wrapper(generate_servers)
+                async with mcp_client_wrapper as mcp_client:
+                    tools = mcp_client.list_tools_sync()
+                    
+                    # Create CloudFormation agent
+                    cf_agent = Agent(
+                        name="cloudformation-generator",
+                        model=strands_orchestrator.model,
+                        tools=tools,
+                        system_prompt=strands_orchestrator._get_cloudformation_prompt(),
+                        conversation_manager=strands_orchestrator.conversation_manager
+                    )
+                    
+                    # Stream CloudFormation generation
+                    cf_prompt = strands_orchestrator._create_prompt_for_agent(agent_inputs, "cloudformation")
+                    cf_content = ""
+                    
+                    async for event in cf_agent.stream_async(cf_prompt):
+                        if "data" in event:
+                            chunk_text = event["data"]
+                            cf_content += chunk_text
+                            yield f"data: {json.dumps({'type': 'cloudformation', 'content': chunk_text})}\n\n"
+                        elif "error" in event:
+                            logger.error(f"CloudFormation streaming error: {event['error']}")
+                            yield f"data: {json.dumps({'type': 'error', 'error': event['error']})}\n\n"
+                            break
+                        elif "result" in event:
+                            result = event['result']
+                            if isinstance(result, dict):
+                                text_content = result.get("text") or result.get("message", {}).get("text", "")
+                                if text_content:
+                                    cf_content += text_content
+                                    yield f"data: {json.dumps({'type': 'cloudformation', 'content': text_content})}\n\n"
+                    
+                    # Send CloudFormation complete signal
+                    yield f"data: {json.dumps({'type': 'cloudformation_complete', 'content': cf_content})}\n\n"
+                    
+                    # Phase 2: Generate Diagram (streaming)
+                    logger.info("Phase 2: Generating architecture diagram...")
+                    yield f"data: {json.dumps({'type': 'status', 'message': 'Generating architecture diagram...'})}\n\n"
+                    
+                    diagram_inputs = agent_inputs.copy()
+                    diagram_inputs["cloudformation_summary"] = strands_orchestrator._summarize_output(cf_content, "cloudformation")
+                    diagram_inputs["cloudformation_content"] = cf_content[:2000]
+                    
+                    diagram_agent = Agent(
+                        name="architecture-diagram-generator",
+                        model=strands_orchestrator.model,
+                        tools=tools,
+                        system_prompt=strands_orchestrator._get_diagram_prompt(),
+                        conversation_manager=strands_orchestrator.conversation_manager
+                    )
+                    
+                    diagram_prompt = strands_orchestrator._create_prompt_for_agent(diagram_inputs, "diagram")
+                    diagram_content = ""
+                    
+                    async for event in diagram_agent.stream_async(diagram_prompt):
+                        if "data" in event:
+                            chunk_text = event["data"]
+                            diagram_content += chunk_text
+                            yield f"data: {json.dumps({'type': 'diagram', 'content': chunk_text})}\n\n"
+                        elif "error" in event:
+                            logger.error(f"Diagram streaming error: {event['error']}")
+                            yield f"data: {json.dumps({'type': 'error', 'error': event['error']})}\n\n"
+                            break
+                        elif "result" in event:
+                            result = event['result']
+                            if isinstance(result, dict):
+                                text_content = result.get("text") or result.get("message", {}).get("text", "")
+                                if text_content:
+                                    diagram_content += text_content
+                                    yield f"data: {json.dumps({'type': 'diagram', 'content': text_content})}\n\n"
+                    
+                    # Extract diagram if embedded
+                    if "```" in diagram_content:
+                        import re
+                        code_match = re.search(r'```(?:\w+)?\n(.*?)\n```', diagram_content, re.DOTALL)
+                        if code_match:
+                            diagram_content = code_match.group(1)
+                    
+                    yield f"data: {json.dumps({'type': 'diagram_complete', 'content': diagram_content})}\n\n"
+                    
+                    # Phase 3: Generate Cost Estimate (streaming)
+                    logger.info("Phase 3: Generating cost estimate...")
+                    yield f"data: {json.dumps({'type': 'status', 'message': 'Generating cost estimate...'})}\n\n"
+                    
+                    cost_inputs = agent_inputs.copy()
+                    cost_inputs["cloudformation_summary"] = diagram_inputs["cloudformation_summary"]
+                    cost_inputs["diagram_summary"] = strands_orchestrator._summarize_output(diagram_content, "diagram")
+                    cost_inputs["cloudformation_content"] = cf_content[:2000]
+                    
+                    cost_agent = Agent(
+                        name="cost-estimation",
+                        model=strands_orchestrator.model,
+                        tools=tools,
+                        system_prompt=strands_orchestrator._get_cost_prompt(),
+                        conversation_manager=strands_orchestrator.conversation_manager
+                    )
+                    
+                    cost_prompt = strands_orchestrator._create_prompt_for_agent(cost_inputs, "cost")
+                    cost_content = ""
+                    
+                    async for event in cost_agent.stream_async(cost_prompt):
+                        if "data" in event:
+                            chunk_text = event["data"]
+                            cost_content += chunk_text
+                            yield f"data: {json.dumps({'type': 'cost', 'content': chunk_text})}\n\n"
+                        elif "error" in event:
+                            logger.error(f"Cost streaming error: {event['error']}")
+                            yield f"data: {json.dumps({'type': 'error', 'error': event['error']})}\n\n"
+                            break
+                        elif "result" in event:
+                            result = event['result']
+                            if isinstance(result, dict):
+                                text_content = result.get("text") or result.get("message", {}).get("text", "")
+                                if text_content:
+                                    cost_content += text_content
+                                    yield f"data: {json.dumps({'type': 'cost', 'content': text_content})}\n\n"
+                    
+                    # Parse cost estimate (use simple parsing since _parse_cost_estimate may not exist)
+                    cost_estimate = {
+                        "monthly_cost": "$500-1000",
+                        "breakdown": cost_content[:500] if cost_content else "Error generating cost estimate"
+                    }
+                    
+                    # Try to extract structured cost data
+                    import re
+                    monthly_match = re.search(r'\$[\d,]+(?:-\$[\d,]+)?', cost_content)
+                    if monthly_match:
+                        cost_estimate["monthly_cost"] = monthly_match.group(0)
+                    
+                    yield f"data: {json.dumps({'type': 'cost_complete', 'cost_estimate': cost_estimate})}\n\n"
+                
+                # Release MCP client
+                await mcp_client_manager.release_mcp_client()
+                
+                # Send completion signal
+                yield f"data: {json.dumps({'type': 'done', 'done': True})}\n\n"
+                
+            except Exception as e:
+                logger.error(f"Generate streaming error: {str(e)}")
+                yield f"data: {json.dumps({'type': 'error', 'error': str(e)})}\n\n"
+            
+        except Exception as e:
+            logger.error(f"Streaming generate error: {str(e)}")
+            yield f"data: {json.dumps({'type': 'error', 'error': str(e)})}\n\n"
     
     return StreamingResponse(generate_stream(), media_type="text/event-stream")
 

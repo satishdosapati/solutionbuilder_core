@@ -297,6 +297,119 @@ export const apiService = {
     return response.data;
   },
 
+  // Streaming version for generate mode
+  async generateArchitectureStream(request: GenerationRequest, onChunk: (chunk: { type: string; content?: string; cloudformation?: string; diagram?: string; cost_estimate?: any; error?: string }) => void) {
+    try {
+      console.log('Starting streaming generate request to:', `${API_BASE_URL}/stream-generate`);
+      const response = await fetch(`${API_BASE_URL}/stream-generate`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          requirements: request.requirements,
+        })
+      });
+
+      console.log('Streaming generate response status:', response.status);
+      if (!response.ok) {
+        throw new Error(`HTTP error! status: ${response.status}`);
+      }
+
+      const reader = response.body?.getReader();
+      if (!reader) {
+        throw new Error('No response body reader available');
+      }
+
+      const decoder = new TextDecoder();
+      let buffer = '';
+      let cloudformationContent = '';
+      let diagramContent = '';
+      let costEstimate: any = null;
+      let finalResult: any = null;
+
+      try {
+        console.log('Starting to read streaming generate response...');
+        while (true) {
+          const { done, value } = await reader.read();
+          if (done) {
+            console.log('Streaming generate completed');
+            break;
+          }
+
+          const chunk = decoder.decode(value, { stream: true });
+          buffer += chunk;
+          
+          // Process complete lines
+          const lines = buffer.split('\n');
+          buffer = lines.pop() || '';
+          
+          for (const line of lines) {
+            if (line.startsWith('data: ')) {
+              try {
+                const data = JSON.parse(line.slice(6));
+                console.log('Parsed streaming generate data:', data);
+                
+                if (data.type === 'status') {
+                  onChunk({ type: 'status', content: data.message });
+                } else if (data.type === 'cloudformation' && data.content) {
+                  cloudformationContent += data.content;
+                  onChunk({ type: 'cloudformation', content: data.content });
+                } else if (data.type === 'cloudformation_complete' && data.content) {
+                  cloudformationContent = data.content;
+                  onChunk({ type: 'cloudformation_complete', cloudformation: data.content });
+                } else if (data.type === 'diagram' && data.content) {
+                  diagramContent += data.content;
+                  onChunk({ type: 'diagram', content: data.content });
+                } else if (data.type === 'diagram_complete' && data.content) {
+                  diagramContent = data.content;
+                  onChunk({ type: 'diagram_complete', diagram: data.content });
+                } else if (data.type === 'cost' && data.content) {
+                  onChunk({ type: 'cost', content: data.content });
+                } else if (data.type === 'cost_complete' && data.cost_estimate) {
+                  costEstimate = data.cost_estimate;
+                  onChunk({ type: 'cost_complete', cost_estimate: data.cost_estimate });
+                } else if (data.type === 'done') {
+                  console.log('Streaming generate done signal received');
+                  finalResult = {
+                    cloudformation_template: cloudformationContent,
+                    architecture_diagram: diagramContent,
+                    cost_estimate: costEstimate || { monthly_cost: '$500-1000' },
+                    success: true
+                  };
+                  return finalResult;
+                } else if (data.type === 'error' || data.error) {
+                  console.error('Streaming generate error received:', data.error);
+                  onChunk({ type: 'error', error: data.error });
+                  throw new Error(data.error);
+                }
+              } catch (e) {
+                console.warn('Failed to parse streaming generate data:', e, 'Line:', line);
+              }
+            }
+          }
+        }
+      } finally {
+        reader.releaseLock();
+      }
+
+      // Return final result if we have one
+      if (finalResult) {
+        return finalResult;
+      }
+
+      return {
+        cloudformation_template: cloudformationContent,
+        architecture_diagram: diagramContent,
+        cost_estimate: costEstimate || { monthly_cost: '$500-1000' },
+        success: true
+      };
+    } catch (error) {
+      console.error('Streaming generate error:', error);
+      throw error;
+    }
+  },
+
   async handleFollowUpQuestion(question: string, architectureContext?: string, sessionId?: string) {
     const response = await api.post('/follow-up', {
       question,

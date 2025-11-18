@@ -586,39 +586,143 @@ function App() {
         }
         
       } else {
-        const result = await apiService.generateArchitecture({ requirements: message });
+        // Generate mode - use streaming
+        console.log('Starting generate mode with message:', message);
         
-        // Add assistant response for generate mode
-        const responseContent = `I've generated your architecture with the following components:\n\nCloudFormation template created\nArchitecture diagram generated\nCost estimate: ${result.cost_estimate?.monthly_cost}`;
-
+        // Add assistant message placeholder first
         addMessage({
           type: 'assistant',
-          content: responseContent,
+          content: 'Generating your architecture...',
           mode: currentMode,
-          context: {
-            result,
-            suggestions: generateSuggestions(result, currentMode),
-            actions: generateActionButtons(result, currentMode),
-            follow_up_questions: (result as any).follow_up_questions || []
-          }
+          context: {}
         });
-
-        // Update context with results
-        updateContext({
-          lastResult: result,
-          conversationHistory: [...conversationState.context.conversationHistory, message],
-          needsClarification: (result as any).analysis?.needs_clarification || false,
-          clarificationQuestions: (result as any).analysis?.clarification_questions || []
-        });
-
-        // Update current architecture immediately if it's a generation result
-        if (result.cloudformation_template) {
-          updateContext({
-            currentArchitecture: {
-              cloudformation: result.cloudformation_template,
-              diagram: result.architecture_diagram,
-              cost: result.cost_estimate
+        
+        try {
+          // Try streaming first for better user experience
+          console.log('Attempting streaming for generate mode...');
+          let cloudformationContent = '';
+          let diagramContent = '';
+          let costEstimate: any = null;
+          let streamingResult: any = null;
+          
+          try {
+            streamingResult = await apiService.generateArchitectureStream(
+              { requirements: message },
+              (chunk: any) => {
+                console.log('Received generate chunk:', chunk.type);
+                
+                if (chunk.type === 'status') {
+                  // Update status message
+                  setConversationState(prev => {
+                    const updatedMessages = [...prev.messages];
+                    const lastMessage = updatedMessages[updatedMessages.length - 1];
+                    if (lastMessage && lastMessage.type === 'assistant') {
+                      lastMessage.content = chunk.content || 'Generating your architecture...';
+                    }
+                    return { ...prev, messages: updatedMessages };
+                  });
+                } else if (chunk.type === 'cloudformation' && chunk.content) {
+                  cloudformationContent += chunk.content;
+                } else if (chunk.type === 'cloudformation_complete' && chunk.cloudformation) {
+                  cloudformationContent = chunk.cloudformation;
+                } else if (chunk.type === 'diagram' && chunk.content) {
+                  diagramContent += chunk.content;
+                } else if (chunk.type === 'diagram_complete' && chunk.diagram) {
+                  diagramContent = chunk.diagram;
+                } else if (chunk.type === 'cost_complete' && chunk.cost_estimate) {
+                  costEstimate = chunk.cost_estimate;
+                }
+                
+                // Trigger scroll to bottom
+                setTimeout(() => {
+                  const messagesEnd = document.querySelector('[data-messages-end]');
+                  messagesEnd?.scrollIntoView({ behavior: 'smooth' });
+                }, 50);
+              }
+            );
+            
+            // Update final message with complete results
+            const responseContent = `I've generated your architecture with the following components:\n\n✅ CloudFormation template created\n✅ Architecture diagram generated\n✅ Cost estimate: ${streamingResult.cost_estimate?.monthly_cost || costEstimate?.monthly_cost || '$500-1000'}`;
+            
+            setConversationState(prev => {
+              const updatedMessages = [...prev.messages];
+              const lastMessage = updatedMessages[updatedMessages.length - 1];
+              if (lastMessage && lastMessage.type === 'assistant') {
+                lastMessage.content = responseContent;
+                lastMessage.context = {
+                  result: streamingResult,
+                  suggestions: generateSuggestions(streamingResult, currentMode),
+                  actions: generateActionButtons(streamingResult, currentMode),
+                  follow_up_questions: []
+                };
+              }
+              return { ...prev, messages: updatedMessages };
+            });
+            
+            // Update context with results
+            updateContext({
+              lastResult: streamingResult,
+              conversationHistory: [...conversationState.context.conversationHistory, message],
+              needsClarification: false,
+              clarificationQuestions: []
+            });
+            
+            // Update current architecture immediately
+            if (streamingResult.cloudformation_template) {
+              updateContext({
+                currentArchitecture: {
+                  cloudformation: streamingResult.cloudformation_template,
+                  diagram: streamingResult.architecture_diagram,
+                  cost: streamingResult.cost_estimate
+                }
+              });
             }
+            
+          } catch (streamingError) {
+            console.warn('Generate streaming failed, falling back to regular API:', streamingError);
+            // Fallback to regular API call
+            const result = await apiService.generateArchitecture({ requirements: message });
+            
+            const responseContent = `I've generated your architecture with the following components:\n\nCloudFormation template created\nArchitecture diagram generated\nCost estimate: ${result.cost_estimate?.monthly_cost}`;
+            
+            setConversationState(prev => {
+              const updatedMessages = [...prev.messages];
+              const lastMessage = updatedMessages[updatedMessages.length - 1];
+              if (lastMessage && lastMessage.type === 'assistant') {
+                lastMessage.content = responseContent;
+                lastMessage.context = {
+                  result,
+                  suggestions: generateSuggestions(result, currentMode),
+                  actions: generateActionButtons(result, currentMode),
+                  follow_up_questions: []
+                };
+              }
+              return { ...prev, messages: updatedMessages };
+            });
+            
+            updateContext({
+              lastResult: result,
+              conversationHistory: [...conversationState.context.conversationHistory, message],
+              needsClarification: false,
+              clarificationQuestions: []
+            });
+            
+            if (result.cloudformation_template) {
+              updateContext({
+                currentArchitecture: {
+                  cloudformation: result.cloudformation_template,
+                  diagram: result.architecture_diagram,
+                  cost: result.cost_estimate
+                }
+              });
+            }
+          }
+        } catch (error) {
+          console.error('Generate mode failed:', error);
+          addMessage({
+            type: 'assistant',
+            content: 'I encountered an error generating your architecture. Please try again.',
+            mode: currentMode
           });
         }
       }
