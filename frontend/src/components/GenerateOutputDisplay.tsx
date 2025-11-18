@@ -89,44 +89,52 @@ const GenerateOutputDisplay: React.FC<GenerateOutputDisplayProps> = ({ results }
 
   return (
     <div className="h-full flex flex-col bg-white dark:bg-gray-800 border-l border-gray-200 dark:border-gray-700">
-      {/* Header */}
-      <div className="px-6 py-4 border-b border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-900">
-        <h2 className="text-lg font-semibold text-gray-900 dark:text-white">⚡ Generated Architecture</h2>
+      {/* Header with Gradient Accent */}
+      <div className="px-6 py-4 border-b border-gray-200 dark:border-gray-800 bg-gradient-to-r from-gray-50 to-blue-50 dark:from-gray-900 dark:to-gray-900">
+        <h2 className="text-lg font-semibold bg-gradient-to-r from-gray-900 to-blue-600 dark:from-white dark:to-blue-400 bg-clip-text text-transparent">
+          Generated Architecture
+        </h2>
         <p className="text-sm text-gray-600 dark:text-gray-400 mt-1">Complete outputs from generate mode</p>
       </div>
 
-      {/* Tab Navigation */}
-      <div className="border-b border-gray-200 dark:border-gray-700">
-        <nav className="flex space-x-8 px-6">
+      {/* Modern Pill-Style Tab Navigation */}
+      <div className="px-6 py-3 border-b border-gray-200 dark:border-gray-800 bg-white dark:bg-gray-900">
+        <nav className="inline-flex gap-2 p-1 bg-gray-100 dark:bg-gray-800 rounded-xl">
           <button
             onClick={() => setActiveTab('template')}
-            className={`py-4 px-1 border-b-2 font-medium text-sm transition-colors ${
-              activeTab === 'template'
-                ? 'border-blue-500 text-blue-600 dark:text-blue-400'
-                : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300 dark:text-gray-400 dark:hover:text-gray-300'
-            }`}
+            className={`
+              px-4 py-2 rounded-lg text-sm font-medium transition-all
+              ${activeTab === 'template'
+                ? 'bg-gradient-to-r from-blue-600 to-purple-600 text-white shadow-medium'
+                : 'text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-gray-200 hover:bg-white dark:hover:bg-gray-700'
+              }
+            `}
           >
-            ☁️ CloudFormation
+            CloudFormation
           </button>
           <button
             onClick={() => setActiveTab('diagram')}
-            className={`py-4 px-1 border-b-2 font-medium text-sm transition-colors ${
-              activeTab === 'diagram'
-                ? 'border-blue-500 text-blue-600 dark:text-blue-400'
-                : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300 dark:text-gray-400 dark:hover:text-gray-300'
-            }`}
+            className={`
+              px-4 py-2 rounded-lg text-sm font-medium transition-all
+              ${activeTab === 'diagram'
+                ? 'bg-gradient-to-r from-blue-600 to-purple-600 text-white shadow-medium'
+                : 'text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-gray-200 hover:bg-white dark:hover:bg-gray-700'
+              }
+            `}
           >
-            🏗️ Diagram
+            Diagram
           </button>
           <button
             onClick={() => setActiveTab('cost')}
-            className={`py-4 px-1 border-b-2 font-medium text-sm transition-colors ${
-              activeTab === 'cost'
-                ? 'border-blue-500 text-blue-600 dark:text-blue-400'
-                : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300 dark:text-gray-400 dark:hover:text-gray-300'
-            }`}
+            className={`
+              px-4 py-2 rounded-lg text-sm font-medium transition-all
+              ${activeTab === 'cost'
+                ? 'bg-gradient-to-r from-blue-600 to-purple-600 text-white shadow-medium'
+                : 'text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-gray-200 hover:bg-white dark:hover:bg-gray-700'
+              }
+            `}
           >
-            💰 Pricing
+            Pricing
           </button>
         </nav>
       </div>
@@ -139,10 +147,9 @@ const GenerateOutputDisplay: React.FC<GenerateOutputDisplayProps> = ({ results }
               <h3 className="text-lg font-semibold text-gray-900 dark:text-white">CloudFormation Template</h3>
               <button
                 onClick={downloadTemplate}
-                className="px-4 py-2 bg-green-600 text-white rounded-md hover:bg-green-700 transition-colors flex items-center space-x-2"
+                className="px-4 py-2 bg-gradient-to-r from-blue-600 to-purple-600 text-white rounded-lg hover:shadow-strong transition-all shadow-medium font-medium text-sm"
               >
-                <span>⬇️</span>
-                <span>Download YAML</span>
+                Download YAML
               </button>
             </div>
             <div className="bg-gray-900 rounded-lg p-4 overflow-auto max-h-[calc(100vh-300px)]">
@@ -159,10 +166,9 @@ const GenerateOutputDisplay: React.FC<GenerateOutputDisplayProps> = ({ results }
               <h3 className="text-lg font-semibold text-gray-900 dark:text-white">Architecture Diagram</h3>
               <button
                 onClick={downloadDiagram}
-                className="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 transition-colors flex items-center space-x-2"
+                className="px-4 py-2 bg-gradient-to-r from-blue-600 to-purple-600 text-white rounded-lg hover:shadow-strong transition-all shadow-medium font-medium text-sm"
               >
-                <span>⬇️</span>
-                <span>Download SVG</span>
+                Download SVG
               </button>
             </div>
             <div className="border border-gray-200 dark:border-gray-600 rounded-lg p-6 bg-gray-50 dark:bg-gray-900">
@@ -200,10 +206,9 @@ const GenerateOutputDisplay: React.FC<GenerateOutputDisplayProps> = ({ results }
               <h3 className="text-lg font-semibold text-gray-900 dark:text-white">Cost Estimate</h3>
               <button
                 onClick={downloadCostEstimate}
-                className="px-4 py-2 bg-orange-600 text-white rounded-md hover:bg-orange-700 transition-colors flex items-center space-x-2"
+                className="px-4 py-2 bg-gradient-to-r from-blue-600 to-purple-600 text-white rounded-lg hover:shadow-strong transition-all shadow-medium font-medium text-sm"
               >
-                <span>⬇️</span>
-                <span>Download JSON</span>
+                Download JSON
               </button>
             </div>
             
