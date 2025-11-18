@@ -244,9 +244,17 @@ const OutputDisplay: React.FC<OutputDisplayProps> = ({ results, loading, mode })
 
   return (
     <div className="bg-white dark:bg-gray-800 rounded-lg shadow-md">
+      {/* Header with Gradient Accent */}
+      <div className="px-6 py-4 border-b border-gray-200 dark:border-gray-800 bg-gradient-to-r from-gray-50 to-blue-50 dark:from-gray-900 dark:to-gray-900">
+        <h2 className="text-lg font-semibold bg-gradient-to-r from-gray-900 to-blue-600 dark:from-white dark:to-blue-400 bg-clip-text text-transparent">
+          Generated Architecture
+        </h2>
+        <p className="text-sm text-gray-600 dark:text-gray-400 mt-1">Complete outputs from generate mode</p>
+      </div>
+
       {/* Modern Pill-Style Tab Navigation */}
-      <div className="px-6 py-3 border-b border-gray-200 dark:border-gray-800">
-        <nav className="inline-flex gap-2 p-1 bg-gray-100 dark:bg-gray-700 rounded-xl">
+      <div className="px-6 py-3 border-b border-gray-200 dark:border-gray-800 bg-white dark:bg-gray-900">
+        <nav className="inline-flex gap-2 p-1 bg-gray-100 dark:bg-gray-800 rounded-xl">
           <button
             onClick={() => setActiveTab('template')}
             className={`

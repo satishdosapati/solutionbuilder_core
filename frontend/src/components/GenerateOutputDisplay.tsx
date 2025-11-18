@@ -43,12 +43,10 @@ const GenerateOutputDisplay: React.FC<GenerateOutputDisplayProps> = ({ results }
     const diagramContent = results.architecture_diagram;
     let blob: Blob;
     let filename: string;
-    let mimeType: string;
 
     if (diagramContent.startsWith('<svg')) {
       blob = new Blob([diagramContent], { type: 'image/svg+xml' });
       filename = 'architecture-diagram.svg';
-      mimeType = 'image/svg+xml';
     } else if (diagramContent.startsWith('data:image')) {
       const base64Match = diagramContent.match(/^data:image\/(\w+);base64,(.+)$/);
       if (base64Match) {
@@ -62,7 +60,6 @@ const GenerateOutputDisplay: React.FC<GenerateOutputDisplayProps> = ({ results }
         const byteArray = new Uint8Array(byteNumbers);
         blob = new Blob([byteArray], { type: `image/${type}` });
         filename = `architecture-diagram.${type}`;
-        mimeType = `image/${type}`;
       } else {
         return;
       }
