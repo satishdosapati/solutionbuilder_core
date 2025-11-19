@@ -245,8 +245,8 @@ const GenerateOutputDisplay: React.FC<GenerateOutputDisplayProps> = ({ results }
                 Download YAML
               </button>
             </div>
-            <div className="bg-gray-900 rounded-lg p-4 overflow-auto max-h-[calc(100vh-300px)]">
-              <pre className="text-xs text-green-400 font-mono">
+            <div className="bg-gray-900 rounded-lg p-4 overflow-auto max-h-[calc(100vh-200px)]">
+              <pre className="text-xs text-green-400 font-mono whitespace-pre-wrap break-words">
                 <code>{getCleanTemplate(results.cloudformation_template || 'Loading template...')}</code>
               </pre>
             </div>

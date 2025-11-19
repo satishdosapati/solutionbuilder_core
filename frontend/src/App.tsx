@@ -5,7 +5,6 @@ import ChatInterface from './components/ChatInterface';
 import ThemeToggle from './components/ThemeToggle';
 import NebulaLogo from './components/NebulaLogo';
 import EnhancedAnalysisDisplay from './components/EnhancedAnalysisDisplay';
-import GenerateOutputDisplay from './components/GenerateOutputDisplay';
 
 function App() {
   console.log('App component rendering...');
@@ -616,17 +615,22 @@ function App() {
                   });
                 } else if (chunk.type === 'cloudformation' && chunk.content) {
                   cloudformationContent += chunk.content;
-                  // Just update status, don't show full template while streaming
+                  // Stream the CloudFormation response in real-time
                   setConversationState(prev => {
                     const updatedMessages = [...prev.messages];
                     const lastMessage = updatedMessages[updatedMessages.length - 1];
                     if (lastMessage && lastMessage.type === 'assistant') {
-                      lastMessage.content = 'Generating CloudFormation template...';
+                      // Update message content with streaming CloudFormation response
+                      lastMessage.content = `Generating CloudFormation template...\n\n${cloudformationContent}`;
+                      // Store streaming response in context
+                      if (!lastMessage.context) lastMessage.context = {};
+                      if (!lastMessage.context.result) lastMessage.context.result = {};
+                      lastMessage.context.result.cloudformation_response = cloudformationContent;
                     }
                     return { ...prev, messages: updatedMessages };
                   });
-                } else if (chunk.type === 'cloudformation_complete' && chunk.cloudformation) {
-                  cloudformationContent = chunk.cloudformation;
+                } else if (chunk.type === 'cloudformation_complete' && (chunk.content || chunk.cloudformation)) {
+                  cloudformationContent = chunk.content || chunk.cloudformation;
                   setConversationState(prev => {
                     const updatedMessages = [...prev.messages];
                     const lastMessage = updatedMessages[updatedMessages.length - 1];
@@ -636,6 +640,8 @@ function App() {
                       if (!lastMessage.context) lastMessage.context = {};
                       if (!lastMessage.context.result) lastMessage.context.result = {};
                       lastMessage.context.result.cloudformation_template = cloudformationContent;
+                      // Store the full MCP server response
+                      lastMessage.context.result.cloudformation_response = cloudformationContent;
                     }
                     return { ...prev, messages: updatedMessages };
                   });
@@ -935,35 +941,18 @@ function App() {
         </div>
       </header>
 
-      {/* Main Content - Dynamic Layout */}
+      {/* Main Content - Single Column Layout */}
       <main className="flex-1 flex overflow-hidden">
-        {(() => {
-          const showGenerateOutputs = conversationState.context.mode === 'generate' && 
-            conversationState.context.lastResult?.cloudformation_template;
-          
-          return (
-            <>
-              {/* Left Column - Chat Interface (narrower when generate outputs are shown) */}
-              <div className={`${showGenerateOutputs ? 'w-2/5' : 'w-full'} overflow-hidden border-r border-gray-200 dark:border-gray-700`}>
-                <ChatInterface
-                  messages={conversationState.messages}
-                  context={conversationState.context}
-                  isLoading={conversationState.isLoading}
-                  onSendMessage={handleSendMessage}
-                  onActionClick={handleActionClick}
-                  onModeChange={(mode) => updateContext({ mode })}
-                />
-              </div>
-              
-              {/* Right Column - Generate Outputs (wider, only for generate mode) */}
-              {showGenerateOutputs && (
-                <div className="w-3/5 overflow-hidden">
-                  <GenerateOutputDisplay results={conversationState.context.lastResult} />
-                </div>
-              )}
-            </>
-          );
-        })()}
+        <div className="w-full overflow-hidden">
+          <ChatInterface
+            messages={conversationState.messages}
+            context={conversationState.context}
+            isLoading={conversationState.isLoading}
+            onSendMessage={handleSendMessage}
+            onActionClick={handleActionClick}
+            onModeChange={(mode) => updateContext({ mode })}
+          />
+        </div>
       </main>
     </div>
   );

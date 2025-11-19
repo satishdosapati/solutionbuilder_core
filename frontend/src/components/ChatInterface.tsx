@@ -192,7 +192,7 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({
             </div>
           </div>
         ) : (
-          <div className="space-y-4 max-w-4xl mx-auto">
+          <div className="space-y-4 w-full">
             {messages.map((message) => (
               <MessageBubble
                 key={message.id}

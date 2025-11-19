@@ -10,6 +10,79 @@ interface MessageBubbleProps {
 const MessageBubble: React.FC<MessageBubbleProps> = ({ message, onActionClick }) => {
   const isUser = message.type === 'user';
   
+  // Function to render markdown code blocks (```yaml ... ```)
+  const renderMarkdownWithCodeBlocks = (text: string) => {
+    if (!text) return null;
+    
+    // Pattern to match ```yaml ... ``` code blocks (non-greedy to match first closing ```)
+    const codeBlockPattern = /```yaml\s*\n([\s\S]*?)```/g;
+    const parts: Array<{ type: 'text' | 'code'; content: string }> = [];
+    let lastIndex = 0;
+    let match;
+    
+    while ((match = codeBlockPattern.exec(text)) !== null) {
+      // Add text before the code block
+      if (match.index > lastIndex) {
+        const beforeText = text.substring(lastIndex, match.index);
+        if (beforeText.trim()) {
+          parts.push({
+            type: 'text',
+            content: beforeText
+          });
+        }
+      }
+      
+      // Add the code block
+      parts.push({
+        type: 'code',
+        content: match[1].trim() // The content inside the code block
+      });
+      
+      lastIndex = match.index + match[0].length;
+    }
+    
+    // Add remaining text after the last code block
+    if (lastIndex < text.length) {
+      const remainingText = text.substring(lastIndex);
+      if (remainingText.trim()) {
+        parts.push({
+          type: 'text',
+          content: remainingText
+        });
+      }
+    }
+    
+    // If no code blocks found, return the original text as plain text
+    if (parts.length === 0) {
+      return <span className="whitespace-pre-wrap break-words">{text}</span>;
+    }
+    
+    // Render parts
+    return (
+      <>
+        {parts.map((part, index) => {
+          if (part.type === 'code') {
+            return (
+              <div key={index} className="my-3">
+                <div className="bg-gray-900 rounded-lg p-3 overflow-auto max-h-[400px] border border-gray-700">
+                  <pre className="text-xs text-green-400 font-mono whitespace-pre-wrap break-words">
+                    <code>{part.content}</code>
+                  </pre>
+                </div>
+              </div>
+            );
+          } else {
+            return (
+              <span key={index} className="whitespace-pre-wrap break-words block">
+                {part.content}
+              </span>
+            );
+          }
+        })}
+      </>
+    );
+  };
+  
   const getModeIcon = (mode?: string) => {
     switch (mode) {
       case 'brainstorm': return '🧠';
@@ -30,7 +103,7 @@ const MessageBubble: React.FC<MessageBubbleProps> = ({ message, onActionClick })
 
   return (
     <div className={`flex ${isUser ? 'justify-end' : 'justify-start'} animate-fade-in`}>
-      <div className={`max-w-[85%] ${isUser ? 'order-2' : 'order-1'}`}>
+      <div className={`w-full max-w-full ${isUser ? 'order-2' : 'order-1'}`}>
         {/* Message Header */}
         <div className={`flex items-center gap-2 mb-1.5 ${isUser ? 'justify-end' : 'justify-start'}`}>
           {!isUser && message.mode && (
@@ -196,12 +269,108 @@ const MessageBubble: React.FC<MessageBubbleProps> = ({ message, onActionClick })
                           </button>
                         </div>
                       </div>
-                      <div className="bg-gray-900 rounded-lg p-3 overflow-auto max-h-[400px] border border-gray-700">
-                        <pre className="text-xs text-green-400 font-mono whitespace-pre">
+                      <div className="bg-gray-900 rounded-lg p-3 overflow-auto max-h-[600px] border border-gray-700">
+                        <pre className="text-xs text-green-400 font-mono whitespace-pre-wrap break-words">
                           <code>{cleanTemplate}</code>
                         </pre>
                       </div>
                     </div>
+
+                    {/* CloudFormation MCP Server Response Display - Show while streaming or when complete */}
+                    {message.context.result?.cloudformation_response && (
+                      <div className="p-4 bg-blue-50 dark:bg-blue-900/20 rounded-lg border border-blue-200 dark:border-blue-800">
+                        <div className="flex items-start gap-2">
+                          <svg className="w-5 h-5 text-blue-600 dark:text-blue-400 mt-0.5 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                          </svg>
+                          <div className="flex-1">
+                            <h5 className="font-semibold text-blue-900 dark:text-blue-100 mb-2">
+                              📋 CloudFormation MCP Server Response
+                              {!message.context.result.cloudformation_template && (
+                                <span className="ml-2 text-xs text-blue-600 dark:text-blue-400 animate-pulse">● Streaming...</span>
+                              )}
+                            </h5>
+                            <div className="text-sm text-blue-800 dark:text-blue-200 max-h-[300px] overflow-auto bg-white dark:bg-gray-800 p-3 rounded border">
+                              {renderMarkdownWithCodeBlocks(message.context.result.cloudformation_response)}
+                            </div>
+                          </div>
+                        </div>
+                      </div>
+                    )}
+
+                    {/* Architecture Diagram Display for generate mode */}
+                    {message.context.result.architecture_diagram && (() => {
+                      const downloadDiagram = () => {
+                        const diagramContent = message.context.result.architecture_diagram;
+                        let blob: Blob;
+                        let filename: string;
+
+                        if (diagramContent.startsWith('<svg')) {
+                          blob = new Blob([diagramContent], { type: 'image/svg+xml' });
+                          filename = 'architecture-diagram.svg';
+                        } else if (diagramContent.startsWith('data:image')) {
+                          const base64Match = diagramContent.match(/^data:image\/(\w+);base64,(.+)$/);
+                          if (base64Match) {
+                            const type = base64Match[1];
+                            const base64Data = base64Match[2];
+                            const byteCharacters = atob(base64Data);
+                            const byteNumbers = new Array(byteCharacters.length);
+                            for (let i = 0; i < byteCharacters.length; i++) {
+                              byteNumbers[i] = byteCharacters.charCodeAt(i);
+                            }
+                            const byteArray = new Uint8Array(byteNumbers);
+                            blob = new Blob([byteArray], { type: `image/${type}` });
+                            filename = `architecture-diagram.${type}`;
+                          } else {
+                            return;
+                          }
+                        } else {
+                          return;
+                        }
+
+                        const url = URL.createObjectURL(blob);
+                        const a = document.createElement('a');
+                        a.href = url;
+                        a.download = filename;
+                        document.body.appendChild(a);
+                        a.click();
+                        document.body.removeChild(a);
+                        URL.revokeObjectURL(url);
+                      };
+
+                      return (
+                        <div className="p-4 bg-gray-50 dark:bg-gray-700 rounded-lg">
+                          <div className="flex justify-between items-center mb-3">
+                            <h4 className="font-semibold text-gray-800 dark:text-gray-200">🏗️ Architecture Diagram</h4>
+                            <button
+                              onClick={downloadDiagram}
+                              className="px-3 py-1.5 text-sm bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors flex items-center gap-1.5"
+                            >
+                              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                              </svg>
+                              Download
+                            </button>
+                          </div>
+                          <div className="bg-white dark:bg-gray-800 rounded-lg p-3 border border-gray-200 dark:border-gray-600">
+                            {message.context.result.architecture_diagram.startsWith('<svg') ? (
+                              <div
+                                className="w-full"
+                                dangerouslySetInnerHTML={{ __html: message.context.result.architecture_diagram }}
+                              />
+                            ) : message.context.result.architecture_diagram.startsWith('data:image') ? (
+                              <img
+                                src={message.context.result.architecture_diagram}
+                                alt="Architecture Diagram"
+                                className="w-full h-auto rounded"
+                              />
+                            ) : (
+                              <p className="text-sm text-gray-600 dark:text-gray-400">Diagram format not supported for display.</p>
+                            )}
+                          </div>
+                        </div>
+                      );
+                    })()}
 
                     {/* Cost Estimate Display */}
                     {message.context.result.cost_estimate && (

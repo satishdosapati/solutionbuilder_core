@@ -722,7 +722,7 @@ async def stream_generate(request: GenerationRequest, session_id: Optional[str] 
                                     cf_content += text_content
                                     yield f"data: {json.dumps({'type': 'cloudformation', 'content': text_content})}\n\n"
                     
-                    # Send CloudFormation complete signal
+                    # Send CloudFormation complete signal with full content
                     yield f"data: {json.dumps({'type': 'cloudformation_complete', 'content': cf_content})}\n\n"
                     
                     # Phase 2: Generate Diagram (streaming)
