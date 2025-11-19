@@ -1,6 +1,6 @@
-# Archai - AWS Solution Architect Tool
+# Nebula.AI - AWS Solution Architect Tool
 
-**Archai** is an AI-powered co-architect that helps cloud engineers and architects design, validate, and deploy enterprise-grade AWS solutions at speed. It bridges human intent and cloud automation with intelligence, precision, and trust.
+**Nebula.AI** is an AI-powered co-architect that helps cloud engineers and architects design, validate, and deploy enterprise-grade AWS solutions at speed. It bridges human intent and cloud automation with intelligence, precision, and trust.
 
 ## 🚀 Features
 

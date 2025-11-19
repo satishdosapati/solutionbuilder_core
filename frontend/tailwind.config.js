@@ -8,8 +8,8 @@ export default {
   theme: {
     extend: {
       colors: {
-        // Archai Brand Colors
-        'archai': {
+        // Nebula.AI Brand Colors
+        'Nebula.AI': {
           'primary': '#FF9900',    // AWS-inspired orange
           'secondary': '#1E293B',   // Deep slate blue
           'accent': '#0EA5E9',     // Electric blue

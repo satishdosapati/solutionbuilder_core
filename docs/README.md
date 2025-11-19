@@ -1,6 +1,6 @@
 # Design Documents & Backlog
 
-Complete design documentation for **Archai** - AWS Cloud Architecture Generation SaaS Platform.
+Complete design documentation for **Nebula.AI** - AWS Cloud Architecture Generation SaaS Platform.
 
 ## ⚠️ Implementation Status
 

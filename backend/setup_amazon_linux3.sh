@@ -1,11 +1,11 @@
 #!/bin/bash
-# Amazon Linux 3 Setup Script for Archai
+# Amazon Linux 3 Setup Script for Nebula.AI
 # This script automates the setup process on Amazon Linux 3
 
 set -e  # Exit on error
 
 echo "=========================================="
-echo "Archai - Amazon Linux 3 Setup"
+echo "Nebula.AI - Amazon Linux 3 Setup"
 echo "=========================================="
 echo ""
 

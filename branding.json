@@ -1,8 +1,8 @@
 {
   "brand": {
-    "name": "Archai",
+    "name": "Nebula.AI",
     "tagline": "The Intelligent AI Co-Architect to Support You on Your Cloud Journey",
-    "description": "Archai is an AI-powered co-architect that helps cloud engineers and architects design, validate, and deploy enterprise-grade solutions at speed. It bridges human intent and cloud automation with intelligence, precision, and trust.",
+    "description": "Nebula.AI is an AI-powered co-architect that helps cloud engineers and architects design, validate, and deploy enterprise-grade solutions at speed. It bridges human intent and cloud automation with intelligence, precision, and trust.",
     "mission": "Empower every architect to design the cloud at the speed of thought.",
     "tone": ["Intelligent", "Supportive", "Visionary", "Professional"]
   },
@@ -59,8 +59,8 @@
     },
     "hero": {
       "title": "Design the Cloud at the Speed of Thought",
-      "subtitle": "Archai — The Intelligent AI Co-Architect to Support You on Your Cloud Journey",
-      "cta_primary": "Try Archai Free",
+      "subtitle": "Nebula.AI — The Intelligent AI Co-Architect to Support You on Your Cloud Journey",
+      "cta_primary": "Try Nebula.AI Free",
       "cta_secondary": "View Demo"
     }
   }

@@ -1,6 +1,6 @@
 # Design Documents Index
 
-**Project:** Archai - AWS Cloud Architecture Generation SaaS Platform  
+**Project:** Nebula.AI - AWS Cloud Architecture Generation SaaS Platform  
 **Last Updated:** 2024-01-15
 
 ## ⚠️ Implementation Status

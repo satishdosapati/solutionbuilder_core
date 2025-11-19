@@ -1,6 +1,6 @@
 # Amazon Linux 3 Setup Guide
 
-This guide will help you deploy Archai on an Amazon Linux 3 EC2 instance.
+This guide will help you deploy Nebula.AI on an Amazon Linux 3 EC2 instance.
 
 ## Prerequisites
 
@@ -112,12 +112,12 @@ npm run dev -- --host 0.0.0.0 --port 5000
 Create backend service:
 
 ```bash
-sudo nano /etc/systemd/system/archai-backend.service
+sudo nano /etc/systemd/system/Nebula.AI-backend.service
 ```
 
 ```ini
 [Unit]
-Description=Archai Backend API
+Description=Nebula.AI Backend API
 After=network.target
 
 [Service]
@@ -136,12 +136,12 @@ WantedBy=multi-user.target
 Create frontend service:
 
 ```bash
-sudo nano /etc/systemd/system/archai-frontend.service
+sudo nano /etc/systemd/system/Nebula.AI-frontend.service
 ```
 
 ```ini
 [Unit]
-Description=Archai Frontend
+Description=Nebula.AI Frontend
 After=network.target
 
 [Service]
@@ -161,18 +161,18 @@ Enable and start services:
 
 ```bash
 sudo systemctl daemon-reload
-sudo systemctl enable archai-backend
-sudo systemctl enable archai-frontend
-sudo systemctl start archai-backend
-sudo systemctl start archai-frontend
+sudo systemctl enable Nebula.AI-backend
+sudo systemctl enable Nebula.AI-frontend
+sudo systemctl start Nebula.AI-backend
+sudo systemctl start Nebula.AI-frontend
 
 # Check status
-sudo systemctl status archai-backend
-sudo systemctl status archai-frontend
+sudo systemctl status Nebula.AI-backend
+sudo systemctl status Nebula.AI-frontend
 
 # View logs
-sudo journalctl -u archai-backend -f
-sudo journalctl -u archai-frontend -f
+sudo journalctl -u Nebula.AI-backend -f
+sudo journalctl -u Nebula.AI-frontend -f
 ```
 
 ### Option B: Using PM2 (Alternative)
@@ -184,11 +184,11 @@ sudo npm install -g pm2
 # Start backend
 cd /home/ec2-user/solutionbuilder_core/backend
 source venv/bin/activate
-pm2 start "python3.12 -m uvicorn main:app --host 0.0.0.0 --port 8000 --no-reload" --name archai-backend
+pm2 start "python3.12 -m uvicorn main:app --host 0.0.0.0 --port 8000 --no-reload" --name Nebula.AI-backend
 
 # Start frontend
 cd ../frontend
-pm2 start "npm run dev -- --host 0.0.0.0 --port 5000" --name archai-frontend
+pm2 start "npm run dev -- --host 0.0.0.0 --port 5000" --name Nebula.AI-frontend
 
 # Save PM2 configuration
 pm2 save

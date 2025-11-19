@@ -1,4 +1,4 @@
-# Frontend - Archai AWS Solution Architect Tool
+# Frontend - Nebula.AI AWS Solution Architect Tool
 
 React + TypeScript + Tailwind CSS implementation for mode-based AWS architecture generation. Provides three intelligent modes (Brainstorm, Analyze, Generate), dynamic MCP server orchestration, and comprehensive output display for CloudFormation templates, diagrams, and cost estimates.
 

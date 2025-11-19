@@ -1,4 +1,4 @@
-# Backend - Archai AWS Solution Architect Tool
+# Backend - Nebula.AI AWS Solution Architect Tool
 
 FastAPI + Python implementation providing mode-based MCP server orchestration, Strands agents integration, and REST API endpoints for CloudFormation template generation, architecture diagrams, and cost estimation services.
 

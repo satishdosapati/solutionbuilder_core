@@ -1,8 +1,8 @@
-# 🧠 Archai - Brand Guidelines
+# 🧠 Nebula.AI - Brand Guidelines
 
 ## Brand Identity
 
-**Name**: Archai  
+**Name**: Nebula.AI  
 **Tagline**: "The Intelligent AI Co-Architect to Support You on Your Cloud Journey"  
 **Mission**: Empower every architect to design the cloud at the speed of thought.
 
@@ -16,7 +16,7 @@
 ## Color Palette
 
 ### Primary Colors
-- **Archai Orange**: `#FF9900` - AWS-inspired, represents innovation and energy
+- **Nebula.AI Orange**: `#FF9900` - AWS-inspired, represents innovation and energy
 - **Deep Slate**: `#1E293B` - Trust and clarity
 - **Electric Blue**: `#0EA5E9` - Callouts and highlights
 
@@ -39,9 +39,9 @@
 
 ## Logo Usage
 
-The Archai logo consists of:
+The Nebula.AI logo consists of:
 - **Icon**: Orange square with white "A"
-- **Text**: "Archai" in Inter Tight font
+- **Text**: "Nebula.AI" in Inter Tight font
 - **Clear Space**: 1.5x the height of the logo
 
 ## Mode Descriptions
@@ -65,7 +65,7 @@ The Archai logo consists of:
 
 ### Supporting Messages
 - "From idea to infrastructure — intelligently"
-- "Archai helps architects think faster, build safer, and deploy smarter"
+- "Nebula.AI helps architects think faster, build safer, and deploy smarter"
 - "Design. Validate. Deploy — with your AI Co-Architect"
 
 ## Usage Guidelines
