@@ -185,11 +185,8 @@ function App() {
                   return { ...prev, messages: updatedMessages };
                 });
                 
-                // Trigger scroll to bottom for smooth reading experience
-                setTimeout(() => {
-                  const messagesEnd = document.querySelector('[data-messages-end]');
-                  messagesEnd?.scrollIntoView({ behavior: 'smooth' });
-                }, 50);
+                // Remove the scroll trigger - ChatInterface handles it intelligently
+                // The component will auto-scroll only if user is at bottom
               }
             );
             
@@ -301,11 +298,8 @@ function App() {
                   return { ...prev, messages: updatedMessages };
                 });
                 
-                // Trigger scroll to bottom for smooth reading experience
-                setTimeout(() => {
-                  const messagesEnd = document.querySelector('[data-messages-end]');
-                  messagesEnd?.scrollIntoView({ behavior: 'smooth' });
-                }, 50);
+                // Remove the scroll trigger - ChatInterface handles it intelligently
+                // The component will auto-scroll only if user is at bottom
               }
             );
             console.log('Streaming completed successfully, result:', streamingResult);
@@ -453,11 +447,8 @@ function App() {
                   return { ...prev, messages: updatedMessages };
                 });
                 
-                // Trigger scroll to bottom for smooth reading experience
-                setTimeout(() => {
-                  const messagesEnd = document.querySelector('[data-messages-end]');
-                  messagesEnd?.scrollIntoView({ behavior: 'smooth' });
-                }, 50);
+                // Remove the scroll trigger - ChatInterface handles it intelligently
+                // The component will auto-scroll only if user is at bottom
               } else if (chunk.type === 'diagram' && chunk.diagram) {
                 diagramContent = chunk.diagram;
                 // Update message with diagram
@@ -604,6 +595,7 @@ function App() {
           let diagramContent = '';
           let costEstimate: any = null;
           let streamingResult: any = null;
+          let currentStatus = 'Generating your architecture...';
           
           try {
             streamingResult = await apiService.generateArchitectureStream(
@@ -613,35 +605,76 @@ function App() {
                 
                 if (chunk.type === 'status') {
                   // Update status message
+                  currentStatus = chunk.content || chunk.message || 'Generating your architecture...';
                   setConversationState(prev => {
                     const updatedMessages = [...prev.messages];
                     const lastMessage = updatedMessages[updatedMessages.length - 1];
                     if (lastMessage && lastMessage.type === 'assistant') {
-                      lastMessage.content = chunk.content || 'Generating your architecture...';
+                      lastMessage.content = currentStatus;
                     }
                     return { ...prev, messages: updatedMessages };
                   });
                 } else if (chunk.type === 'cloudformation' && chunk.content) {
                   cloudformationContent += chunk.content;
+                  // Just update status, don't show full template while streaming
+                  setConversationState(prev => {
+                    const updatedMessages = [...prev.messages];
+                    const lastMessage = updatedMessages[updatedMessages.length - 1];
+                    if (lastMessage && lastMessage.type === 'assistant') {
+                      lastMessage.content = 'Generating CloudFormation template...';
+                    }
+                    return { ...prev, messages: updatedMessages };
+                  });
                 } else if (chunk.type === 'cloudformation_complete' && chunk.cloudformation) {
                   cloudformationContent = chunk.cloudformation;
+                  setConversationState(prev => {
+                    const updatedMessages = [...prev.messages];
+                    const lastMessage = updatedMessages[updatedMessages.length - 1];
+                    if (lastMessage && lastMessage.type === 'assistant') {
+                      lastMessage.content = '✅ CloudFormation template generated\n\nGenerating architecture diagram...';
+                      // Store full template in context for download/deploy
+                      if (!lastMessage.context) lastMessage.context = {};
+                      if (!lastMessage.context.result) lastMessage.context.result = {};
+                      lastMessage.context.result.cloudformation_template = cloudformationContent;
+                    }
+                    return { ...prev, messages: updatedMessages };
+                  });
                 } else if (chunk.type === 'diagram' && chunk.content) {
                   diagramContent += chunk.content;
                 } else if (chunk.type === 'diagram_complete' && chunk.diagram) {
                   diagramContent = chunk.diagram;
+                  setConversationState(prev => {
+                    const updatedMessages = [...prev.messages];
+                    const lastMessage = updatedMessages[updatedMessages.length - 1];
+                    if (lastMessage && lastMessage.type === 'assistant') {
+                      lastMessage.content = `✅ CloudFormation template generated\n✅ Architecture diagram generated\n\nGenerating cost estimate...`;
+                      if (!lastMessage.context) lastMessage.context = {};
+                      if (!lastMessage.context.result) lastMessage.context.result = {};
+                      lastMessage.context.result.architecture_diagram = diagramContent;
+                    }
+                    return { ...prev, messages: updatedMessages };
+                  });
                 } else if (chunk.type === 'cost_complete' && chunk.cost_estimate) {
                   costEstimate = chunk.cost_estimate;
+                  setConversationState(prev => {
+                    const updatedMessages = [...prev.messages];
+                    const lastMessage = updatedMessages[updatedMessages.length - 1];
+                    if (lastMessage && lastMessage.type === 'assistant') {
+                      lastMessage.content = `I've generated your architecture with the following components:\n\n✅ CloudFormation template created\n✅ Architecture diagram generated\n✅ Cost estimate: ${costEstimate?.monthly_cost || '$500-1000'}`;
+                      if (!lastMessage.context) lastMessage.context = {};
+                      if (!lastMessage.context.result) lastMessage.context.result = {};
+                      lastMessage.context.result.cost_estimate = costEstimate;
+                    }
+                    return { ...prev, messages: updatedMessages };
+                  });
                 }
                 
-                // Trigger scroll to bottom
-                setTimeout(() => {
-                  const messagesEnd = document.querySelector('[data-messages-end]');
-                  messagesEnd?.scrollIntoView({ behavior: 'smooth' });
-                }, 50);
+                // Remove the scroll trigger - ChatInterface handles it intelligently
+                // The component will auto-scroll only if user is at bottom
               }
             );
             
-            // Update final message with complete results
+            // Update final message with complete results and context
             const responseContent = `I've generated your architecture with the following components:\n\n✅ CloudFormation template created\n✅ Architecture diagram generated\n✅ Cost estimate: ${streamingResult.cost_estimate?.monthly_cost || costEstimate?.monthly_cost || '$500-1000'}`;
             
             setConversationState(prev => {
@@ -683,7 +716,7 @@ function App() {
             // Fallback to regular API call
             const result = await apiService.generateArchitecture({ requirements: message });
             
-            const responseContent = `I've generated your architecture with the following components:\n\nCloudFormation template created\nArchitecture diagram generated\nCost estimate: ${result.cost_estimate?.monthly_cost}`;
+            const responseContent = `I've generated your architecture with the following components:\n\n✅ CloudFormation template created\n✅ Architecture diagram generated\n✅ Cost estimate: ${result.cost_estimate?.monthly_cost || '$500-1000'}`;
             
             setConversationState(prev => {
               const updatedMessages = [...prev.messages];
@@ -691,7 +724,11 @@ function App() {
               if (lastMessage && lastMessage.type === 'assistant') {
                 lastMessage.content = responseContent;
                 lastMessage.context = {
-                  result,
+                  result: {
+                    cloudformation_template: result.cloudformation_template,
+                    architecture_diagram: result.architecture_diagram,
+                    cost_estimate: result.cost_estimate
+                  },
                   suggestions: generateSuggestions(result, currentMode),
                   actions: generateActionButtons(result, currentMode),
                   follow_up_questions: []

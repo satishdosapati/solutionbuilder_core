@@ -31,9 +31,87 @@ const GenerateOutputDisplay: React.FC<GenerateOutputDisplayProps> = ({ results }
     URL.revokeObjectURL(url);
   };
 
+  // Clean CloudFormation template - remove any markdown code blocks or extra text
+  const getCleanTemplate = (template: string): string => {
+    if (!template) return '';
+    
+    // Remove markdown code blocks
+    let clean = template.replace(/```(?:yaml|yml)?\s*\n?/g, '').replace(/```\s*$/g, '').trim();
+    
+    // Find the actual YAML content (starts with AWSTemplateFormatVersion, Resources, Parameters, etc.)
+    const yamlStartPatterns = [
+      /AWSTemplateFormatVersion/,
+      /^Resources:/m,
+      /^Parameters:/m,
+      /^Outputs:/m,
+      /^Mappings:/m,
+      /^Conditions:/m,
+      /^Transform:/m,
+    ];
+    
+    let startIndex = -1;
+    for (const pattern of yamlStartPatterns) {
+      const match = clean.search(pattern);
+      if (match !== -1) {
+        startIndex = match;
+        break;
+      }
+    }
+    
+    if (startIndex !== -1) {
+      clean = clean.substring(startIndex);
+    }
+    
+    // Remove any trailing explanatory text (lines that don't look like YAML)
+    const lines = clean.split('\n');
+    const yamlLines: string[] = [];
+    let inYaml = false;
+    
+    for (const line of lines) {
+      const trimmed = line.trim();
+      
+      // Detect start of YAML
+      if (!inYaml && (
+        trimmed.startsWith('AWSTemplateFormatVersion') ||
+        trimmed.startsWith('Resources:') ||
+        trimmed.startsWith('Parameters:') ||
+        trimmed.startsWith('Outputs:') ||
+        trimmed.startsWith('Mappings:') ||
+        trimmed.startsWith('Conditions:') ||
+        trimmed.startsWith('Transform:') ||
+        trimmed.startsWith('---')
+      )) {
+        inYaml = true;
+      }
+      
+      if (inYaml) {
+        // Stop if we hit non-YAML content (explanatory text)
+        if (trimmed && 
+            !trimmed.startsWith('#') && 
+            !trimmed.match(/^\s*[-!&*]/) && 
+            !trimmed.includes(':') &&
+            !trimmed.match(/^\s*[A-Z][a-zA-Z0-9]*:/) &&
+            trimmed.length > 0 &&
+            !trimmed.match(/^\s*$/)
+        ) {
+          // Check if it's explanatory text
+          if (!trimmed.toLowerCase().includes('template') && 
+              !trimmed.toLowerCase().includes('cloudformation') &&
+              !trimmed.toLowerCase().includes('aws')) {
+            break;
+          }
+        }
+        yamlLines.push(line);
+      }
+    }
+    
+    return yamlLines.length > 0 ? yamlLines.join('\n').trim() : clean;
+  };
+
   const downloadTemplate = () => {
     if (results.cloudformation_template) {
-      downloadFile(results.cloudformation_template, 'cloudformation-template.yaml', 'text/yaml');
+      const cleanTemplate = getCleanTemplate(results.cloudformation_template);
+      downloadFile(cleanTemplate, 'cloudformation-template.yaml', 'text/yaml');
     }
   };
 
@@ -81,6 +159,24 @@ const GenerateOutputDisplay: React.FC<GenerateOutputDisplayProps> = ({ results }
     if (results.cost_estimate) {
       const costData = JSON.stringify(results.cost_estimate, null, 2);
       downloadFile(costData, 'cost-estimate.json', 'application/json');
+    }
+  };
+
+  const openAWSConsole = () => {
+    // Get region from cost estimate or default to us-east-1
+    const region = results.cost_estimate?.region || 'us-east-1';
+    // Open AWS CloudFormation console create stack page
+    const cloudFormationUrl = `https://console.aws.amazon.com/cloudformation/home?region=${region}#/stacks/create`;
+    window.open(cloudFormationUrl, '_blank');
+    
+    // Copy template to clipboard for easy pasting
+    if (results.cloudformation_template) {
+      const cleanTemplate = getCleanTemplate(results.cloudformation_template);
+      navigator.clipboard.writeText(cleanTemplate).then(() => {
+        console.log('Template copied to clipboard');
+      }).catch(err => {
+        console.error('Failed to copy template:', err);
+      });
     }
   };
 
@@ -151,9 +247,25 @@ const GenerateOutputDisplay: React.FC<GenerateOutputDisplayProps> = ({ results }
             </div>
             <div className="bg-gray-900 rounded-lg p-4 overflow-auto max-h-[calc(100vh-300px)]">
               <pre className="text-xs text-green-400 font-mono">
-                <code>{results.cloudformation_template || 'Loading template...'}</code>
+                <code>{getCleanTemplate(results.cloudformation_template || 'Loading template...')}</code>
               </pre>
             </div>
+            
+            {/* AWS Console Deploy Button */}
+            {results.cloudformation_template && (
+              <div className="flex justify-end pt-4 border-t border-gray-200 dark:border-gray-700">
+                <button
+                  onClick={openAWSConsole}
+                  className="px-6 py-3 bg-gradient-to-r from-orange-500 to-orange-600 text-white rounded-lg hover:shadow-strong transition-all shadow-medium font-medium text-sm flex items-center gap-2"
+                  title="Open AWS CloudFormation Console to deploy this template (template will be copied to clipboard)"
+                >
+                  <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" />
+                  </svg>
+                  Deploy in AWS Console
+                </button>
+              </div>
+            )}
           </div>
         )}
 

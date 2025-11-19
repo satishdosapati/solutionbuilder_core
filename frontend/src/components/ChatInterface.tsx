@@ -1,4 +1,4 @@
-import React, { useRef, useEffect } from 'react';
+import React, { useRef, useEffect, useState, useCallback } from 'react';
 import { ChatMessage, ConversationContext } from '../types';
 import MessageBubble from './MessageBubble';
 import ConversationInput from './ConversationInput';
@@ -22,24 +22,132 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({
   onModeChange,
 }) => {
   const messagesEndRef = useRef<HTMLDivElement>(null);
+  const messagesContainerRef = useRef<HTMLDivElement>(null);
+  const shouldAutoScrollRef = useRef(true);
+  const isScrollingProgrammaticallyRef = useRef(false);
+  const lastScrollTopRef = useRef(0);
+  const scrollTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+  const lastMessageCountRef = useRef(0);
 
-  const scrollToBottom = () => {
-    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
-  };
+  // Check if user is near bottom of scroll container
+  const isNearBottom = useCallback(() => {
+    const container = messagesContainerRef.current;
+    if (!container) return true;
+    
+    const threshold = 150; // pixels from bottom
+    const scrollTop = container.scrollTop;
+    const scrollHeight = container.scrollHeight;
+    const clientHeight = container.clientHeight;
+    const distanceFromBottom = scrollHeight - scrollTop - clientHeight;
+    
+    return distanceFromBottom < threshold;
+  }, []);
 
-  // Enhanced scrolling for streaming responses
-  useEffect(() => {
-    scrollToBottom();
-  }, [messages]);
+  const scrollToBottom = useCallback((force = false) => {
+    const container = messagesContainerRef.current;
+    if (!container) return;
 
-  // Additional scroll trigger for streaming content updates
-  useEffect(() => {
-    if (isLoading) {
-      // Scroll more frequently during loading/streaming
-      const interval = setInterval(scrollToBottom, 500);
-      return () => clearInterval(interval);
+    // Check if we should scroll
+    const shouldScroll = force || (shouldAutoScrollRef.current && isNearBottom());
+    
+    if (shouldScroll) {
+      isScrollingProgrammaticallyRef.current = true;
+      container.scrollTop = container.scrollHeight;
+      
+      // Reset flag after scroll completes
+      setTimeout(() => {
+        isScrollingProgrammaticallyRef.current = false;
+      }, 300);
     }
-  }, [isLoading]);
+  }, [isNearBottom]);
+
+  // Initialize scroll position tracking
+  useEffect(() => {
+    const container = messagesContainerRef.current;
+    if (container) {
+      lastScrollTopRef.current = container.scrollTop;
+    }
+  }, []);
+
+  // Handle user scroll events - detect manual scrolling
+  useEffect(() => {
+    const container = messagesContainerRef.current;
+    if (!container) return;
+
+    const handleScroll = () => {
+      // Ignore programmatic scrolling
+      if (isScrollingProgrammaticallyRef.current) {
+        return;
+      }
+
+      const currentScrollTop = container.scrollTop;
+      const scrollHeight = container.scrollHeight;
+      const clientHeight = container.clientHeight;
+      const distanceFromBottom = scrollHeight - currentScrollTop - clientHeight;
+      
+      // Detect if user scrolled up (scrollTop increased) or down
+      const scrolledUp = currentScrollTop > lastScrollTopRef.current;
+      lastScrollTopRef.current = currentScrollTop;
+      
+      // Clear existing timeout
+      if (scrollTimeoutRef.current) {
+        clearTimeout(scrollTimeoutRef.current);
+      }
+      
+      // If user scrolled up or is far from bottom, disable auto-scroll
+      if (scrolledUp || distanceFromBottom > 150) {
+        shouldAutoScrollRef.current = false;
+        scrollTimeoutRef.current = setTimeout(() => {
+          // Re-enable only if user scrolled back to bottom
+          if (isNearBottom()) {
+            shouldAutoScrollRef.current = true;
+          }
+        }, 100);
+      } else if (distanceFromBottom < 150) {
+        // User is near bottom, re-enable auto-scroll
+        shouldAutoScrollRef.current = true;
+      }
+    };
+
+    container.addEventListener('scroll', handleScroll, { passive: true });
+    return () => {
+      container.removeEventListener('scroll', handleScroll);
+      if (scrollTimeoutRef.current) {
+        clearTimeout(scrollTimeoutRef.current);
+      }
+    };
+  }, [isNearBottom]);
+
+  // Auto-scroll when NEW messages are added (not content updates)
+  useEffect(() => {
+    const currentMessageCount = messages.length;
+    const previousMessageCount = lastMessageCountRef.current;
+    
+    // Only scroll if a new message was added (count increased)
+    if (currentMessageCount > previousMessageCount && currentMessageCount > 0) {
+      lastMessageCountRef.current = currentMessageCount;
+      // Small delay to ensure DOM is updated
+      setTimeout(() => {
+        scrollToBottom(true);
+      }, 100);
+    } else {
+      lastMessageCountRef.current = currentMessageCount;
+    }
+  }, [messages.length, scrollToBottom]);
+
+  // Smart scrolling during streaming (only if user is at bottom)
+  useEffect(() => {
+    if (!isLoading) return;
+
+    const interval = setInterval(() => {
+      // Only auto-scroll if user hasn't disabled it and is near bottom
+      if (shouldAutoScrollRef.current && isNearBottom() && !isScrollingProgrammaticallyRef.current) {
+        scrollToBottom();
+      }
+    }, 300);
+    
+    return () => clearInterval(interval);
+  }, [isLoading, isNearBottom, scrollToBottom]);
 
   return (
     <div className="flex flex-col h-full bg-white dark:bg-gray-900">
@@ -53,7 +161,10 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({
       </div>
 
       {/* Messages */}
-      <div className="flex-1 overflow-y-auto px-6 py-6 scrollbar-thin">
+      <div 
+        ref={messagesContainerRef}
+        className="flex-1 overflow-y-auto px-6 py-6 scrollbar-thin"
+      >
         {messages.length === 0 ? (
           <div className="flex items-center justify-center h-full">
             <div className="max-w-md animate-fade-in">

@@ -58,7 +58,170 @@ const MessageBubble: React.FC<MessageBubbleProps> = ({ message, onActionClick })
                 {message.content}
               </div>
               
-              {/* Note: Generate mode outputs are shown in the right panel (GenerateOutputDisplay component) */}
+              {/* Show CloudFormation template and buttons for generate mode */}
+              {!isUser && message.mode === 'generate' && message.context?.result?.cloudformation_template && (() => {
+                const getCleanTemplate = (template: string): string => {
+                  if (!template) return '';
+                  
+                  // Remove markdown code blocks
+                  let clean = template.replace(/```(?:yaml|yml)?\s*\n?/g, '').replace(/```\s*$/g, '').trim();
+                  
+                  // Find the actual YAML content
+                  const yamlStartPatterns = [
+                    /AWSTemplateFormatVersion/,
+                    /^Resources:/m,
+                    /^Parameters:/m,
+                    /^Outputs:/m,
+                    /^Mappings:/m,
+                    /^Conditions:/m,
+                    /^Transform:/m,
+                  ];
+                  
+                  let startIndex = -1;
+                  for (const pattern of yamlStartPatterns) {
+                    const match = clean.search(pattern);
+                    if (match !== -1) {
+                      startIndex = match;
+                      break;
+                    }
+                  }
+                  
+                  if (startIndex !== -1) {
+                    clean = clean.substring(startIndex);
+                  }
+                  
+                  // Remove any trailing explanatory text
+                  const lines = clean.split('\n');
+                  const yamlLines: string[] = [];
+                  let inYaml = false;
+                  
+                  for (const line of lines) {
+                    const trimmed = line.trim();
+                    
+                    if (!inYaml && (
+                      trimmed.startsWith('AWSTemplateFormatVersion') ||
+                      trimmed.startsWith('Resources:') ||
+                      trimmed.startsWith('Parameters:') ||
+                      trimmed.startsWith('Outputs:') ||
+                      trimmed.startsWith('Mappings:') ||
+                      trimmed.startsWith('Conditions:') ||
+                      trimmed.startsWith('Transform:') ||
+                      trimmed.startsWith('---')
+                    )) {
+                      inYaml = true;
+                    }
+                    
+                    if (inYaml) {
+                      if (trimmed && 
+                          !trimmed.startsWith('#') && 
+                          !trimmed.match(/^\s*[-!&*]/) && 
+                          !trimmed.includes(':') &&
+                          !trimmed.match(/^\s*[A-Z][a-zA-Z0-9]*:/) &&
+                          trimmed.length > 0 &&
+                          !trimmed.match(/^\s*$/)
+                      ) {
+                        if (!trimmed.toLowerCase().includes('template') && 
+                            !trimmed.toLowerCase().includes('cloudformation') &&
+                            !trimmed.toLowerCase().includes('aws')) {
+                          break;
+                        }
+                      }
+                      yamlLines.push(line);
+                    }
+                  }
+                  
+                  return yamlLines.length > 0 ? yamlLines.join('\n').trim() : clean;
+                };
+
+                const downloadTemplate = () => {
+                  const template = message.context.result.cloudformation_template;
+                  if (template) {
+                    const cleanTemplate = getCleanTemplate(template);
+                    const blob = new Blob([cleanTemplate], { type: 'text/yaml' });
+                    const url = URL.createObjectURL(blob);
+                    const a = document.createElement('a');
+                    a.href = url;
+                    a.download = 'cloudformation-template.yaml';
+                    document.body.appendChild(a);
+                    a.click();
+                    document.body.removeChild(a);
+                    URL.revokeObjectURL(url);
+                  }
+                };
+
+                const openAWSConsole = () => {
+                  const region = message.context.result.cost_estimate?.region || 'us-east-1';
+                  const cloudFormationUrl = `https://console.aws.amazon.com/cloudformation/home?region=${region}#/stacks/create`;
+                  window.open(cloudFormationUrl, '_blank');
+                  
+                  const template = message.context.result.cloudformation_template;
+                  if (template) {
+                    const cleanTemplate = getCleanTemplate(template);
+                    navigator.clipboard.writeText(cleanTemplate).then(() => {
+                      console.log('Template copied to clipboard');
+                    }).catch(err => {
+                      console.error('Failed to copy template:', err);
+                    });
+                  }
+                };
+
+                const template = message.context.result.cloudformation_template;
+                const cleanTemplate = getCleanTemplate(template);
+
+                return (
+                  <div className="mt-4 space-y-3">
+                    {/* CloudFormation Template Preview */}
+                    <div className="p-4 bg-gray-50 dark:bg-gray-700 rounded-lg">
+                      <div className="flex justify-between items-center mb-3">
+                        <h4 className="font-semibold text-gray-800 dark:text-gray-200">⚡ CloudFormation Template</h4>
+                        <div className="flex gap-2">
+                          <button
+                            onClick={downloadTemplate}
+                            className="px-3 py-1.5 text-sm bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors flex items-center gap-1.5"
+                          >
+                            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                            </svg>
+                            Download
+                          </button>
+                          <button
+                            onClick={openAWSConsole}
+                            className="px-3 py-1.5 text-sm bg-gradient-to-r from-orange-500 to-orange-600 text-white rounded-lg hover:shadow-md transition-all flex items-center gap-1.5"
+                            title="Open AWS CloudFormation Console (template will be copied to clipboard)"
+                          >
+                            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" />
+                            </svg>
+                            Deploy in AWS
+                          </button>
+                        </div>
+                      </div>
+                      <div className="bg-gray-900 rounded-lg p-3 overflow-auto max-h-[400px] border border-gray-700">
+                        <pre className="text-xs text-green-400 font-mono whitespace-pre">
+                          <code>{cleanTemplate}</code>
+                        </pre>
+                      </div>
+                    </div>
+
+                    {/* Cost Estimate Display */}
+                    {message.context.result.cost_estimate && (
+                      <div className="p-3 bg-gradient-to-r from-green-50 to-blue-50 dark:from-green-900 dark:to-blue-900 rounded-lg">
+                        <div className="flex justify-between items-center">
+                          <div>
+                            <p className="text-sm font-medium text-gray-800 dark:text-gray-200">💰 Estimated Monthly Cost</p>
+                            <p className="text-xs text-gray-600 dark:text-gray-400">
+                              Region: {message.context.result.cost_estimate.region || 'us-east-1'}
+                            </p>
+                          </div>
+                          <p className="text-2xl font-bold text-green-600 dark:text-green-400">
+                            {message.context.result.cost_estimate.monthly_cost || '$500-1000'}
+                          </p>
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                );
+              })()}
               
               {/* Show architecture diagram for analyze mode */}
               {!isUser && message.mode === 'analyze' && message.context?.result?.architecture_diagram && (() => {

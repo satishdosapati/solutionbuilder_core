@@ -1372,6 +1372,56 @@ class MCPEnabledOrchestrator:
                 "cost": {"error": str(e), "success": False}
             }
     
+    def _extract_cloudformation_template(self, content: str) -> str:
+        """Extract clean CloudFormation YAML from response, removing markdown and explanatory text"""
+        if not content:
+            return ""
+        
+        # First, try to extract YAML from markdown code blocks
+        # Match ```yaml, ```yml, or ``` followed by YAML content
+        yaml_patterns = [
+            r'```(?:yaml|yml)?\s*\n(.*?)```',  # Markdown code blocks
+            r'```\s*\n(.*?)```',  # Generic code blocks
+        ]
+        
+        for pattern in yaml_patterns:
+            matches = re.findall(pattern, content, re.DOTALL)
+            if matches:
+                # Return the longest match (most likely the full template)
+                template = max(matches, key=len).strip()
+                # Remove any leading/trailing whitespace and validate it starts with YAML
+                if template.startswith(('AWSTemplateFormatVersion', '---', 'Resources:', 'Parameters:')):
+                    return template
+        
+        # If no code blocks found, try to extract YAML content directly
+        # Look for lines that start with YAML structure
+        lines = content.split('\n')
+        yaml_lines = []
+        in_yaml = False
+        
+        for line in lines:
+            # Detect start of YAML (CloudFormation template)
+            if line.strip().startswith(('AWSTemplateFormatVersion', '---', 'Resources:', 'Parameters:', 'Outputs:', 'Mappings:', 'Conditions:', 'Transform:')):
+                in_yaml = True
+            
+            if in_yaml:
+                # Stop if we hit markdown code block end or explanatory text
+                if line.strip().startswith('```') or (line.strip() and not line.strip().startswith(('#', ' ', '-', '!', '&', '*')) and ':' not in line and not line.strip().startswith(('AWSTemplateFormatVersion', 'Resources', 'Parameters', 'Outputs', 'Mappings', 'Conditions', 'Transform'))):
+                    # Check if this looks like explanatory text (not YAML)
+                    if not any(keyword in line.lower() for keyword in ['template', 'cloudformation', 'aws', 'resource', 'parameter']):
+                        break
+                yaml_lines.append(line)
+        
+        if yaml_lines:
+            template = '\n'.join(yaml_lines).strip()
+            # Remove any trailing markdown or explanatory text
+            if '```' in template:
+                template = template.split('```')[0].strip()
+            return template
+        
+        # Fallback: return content as-is if no extraction worked
+        return content.strip()
+    
     async def _execute_agent(self, agent: Agent, inputs: Dict[str, Any], agent_type: str) -> Dict[str, Any]:
         """Execute a specific agent with appropriate prompt"""
         try:
@@ -1393,6 +1443,10 @@ class MCPEnabledOrchestrator:
                 content = str(response.content)
             else:
                 content = str(response)
+            
+            # For CloudFormation templates, extract clean YAML
+            if agent_type == "cloudformation":
+                content = self._extract_cloudformation_template(content)
             
             return {
                 "content": content,

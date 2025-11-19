@@ -5,11 +5,14 @@ This guide will help you set up the AWS Solution Architect Tool with real Strand
 ## Prerequisites
 
 ### Required Software
-- Python 3.11 or higher
+- Python 3.11 or higher (Python 3.12 recommended)
 - Node.js 18 or higher
 - AWS CLI configured with appropriate credentials
 - Git
-- Graphviz (for diagram generation) - Install via Chocolatey: `choco install graphviz` or download from https://www.graphviz.org/
+- Graphviz (for diagram generation)
+  - **Windows**: Install via Chocolatey: `choco install graphviz` or download from https://www.graphviz.org/
+  - **Linux/Mac**: `sudo apt install graphviz` (Ubuntu/Debian) or `brew install graphviz` (Mac)
+  - **Amazon Linux 3**: See [Amazon Linux 3 Setup Guide](docs/AMAZON_LINUX_3_SETUP.md) for complete instructions
 
 ### AWS Credentials
 You need AWS credentials configured for:
@@ -20,6 +23,8 @@ You need AWS credentials configured for:
 - Anthropic API key (as fallback if AWS Bedrock is not available)
 
 ## Installation Steps
+
+> **For Amazon Linux 3 EC2 deployment**, see the dedicated [Amazon Linux 3 Setup Guide](docs/AMAZON_LINUX_3_SETUP.md) which includes automated setup scripts and production deployment instructions.
 
 ### 1. Clone and Setup Backend
 

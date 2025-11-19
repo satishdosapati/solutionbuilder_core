@@ -65,6 +65,32 @@ run_dev.bat
 - **Backend API**: http://localhost:8000
 - **API Docs**: http://localhost:8000/docs
 
+### Amazon Linux 3 Deployment
+
+For production deployment on Amazon Linux 3 EC2 instances:
+
+```bash
+# Quick setup using automated script
+cd backend
+bash setup_amazon_linux3.sh
+
+# Or follow detailed guide
+# See: docs/AMAZON_LINUX_3_SETUP.md
+```
+
+**Key Requirements:**
+- Python 3.12+ (installed via script)
+- Node.js 18+ (installed via script)
+- Graphviz for diagram generation (installed via script)
+- AWS credentials configured (IAM role or `.env` file)
+
+**Production Deployment:**
+- Use systemd services for automatic startup (see setup guide)
+- Configure firewall rules for ports 8000 (backend) and 5000 (frontend)
+- Set up reverse proxy (nginx/Apache) for HTTPS in production
+
+For complete setup instructions, see [Amazon Linux 3 Setup Guide](docs/AMAZON_LINUX_3_SETUP.md).
+
 ## 🔧 Configuration
 
 1. **AWS Credentials**: Configure AWS CLI with Bedrock access, or set directly in `backend/.env`

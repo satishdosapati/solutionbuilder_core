@@ -63,19 +63,6 @@ const cleanResponseText = (text: string): string => {
 };
 
 export const apiService = {
-  async getAvailableRoles(): Promise<string[]> {
-    const response = await api.get('/roles');
-    return response.data.roles;
-  },
-
-  async getMcpServersForRoles(roles: string[], requirements: string) {
-    const response = await api.post('/roles/mcp-servers', {
-      roles,
-      requirements,
-    });
-    return response.data;
-  },
-
   async brainstormKnowledge(request: GenerationRequest) {
     try {
       console.log('Making brainstorm API call:', request);
