@@ -1208,9 +1208,9 @@ class MCPEnabledOrchestrator:
                 logger.info(f"Attempting to initialize Bedrock model in region: {region}")
                 model_id = os.getenv('BEDROCK_MODEL_ID', "anthropic.claude-3-5-sonnet-20240620-v1:0")
                 logger.info(f"Using Bedrock model ID: {model_id}")
+                # BedrockModel reads region from AWS_REGION/AWS_DEFAULT_REGION env vars automatically
                 return BedrockModel(
-                    model_id=model_id,
-                    region=region
+                    model_id=model_id
                 )
         except Exception as e:
             logger.warning(f"Failed to initialize Bedrock model: {e}")
@@ -1747,9 +1747,9 @@ class MCPKnowledgeAgent:
             # 3. Or use a different model ID format
             model_id = os.getenv('BEDROCK_MODEL_ID', "anthropic.claude-3-5-sonnet-20240620-v1:0")
             logger.info(f"Using Bedrock model ID: {model_id}")
+            # BedrockModel reads region from AWS_REGION/AWS_DEFAULT_REGION env vars automatically
             return BedrockModel(
-                model_id=model_id,
-                region=region
+                model_id=model_id
             )
         except Exception as e:
             error_msg = str(e)
