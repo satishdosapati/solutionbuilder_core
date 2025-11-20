@@ -1768,54 +1768,51 @@ class MCPKnowledgeAgent:
         - Latest AWS blog posts and announcements
         
         CRITICAL INSTRUCTIONS FOR DIAGRAM GENERATION:
-        When asked to generate diagrams, follow this process:
+        When asked to generate diagrams, you MUST follow this exact process:
         
-        1. FIRST: Call 'get_diagram_examples' tool to see example formats
-        2. THEN: Call 'generate_diagram' tool with Python code
+        STEP 1: Call 'get_diagram_examples' tool FIRST to see the exact format and examples
+        STEP 2: Review the examples carefully to understand the required code structure
+        STEP 3: Call 'generate_diagram' tool with Python code matching the examples exactly
         
-        According to AWS Diagram MCP Server documentation (https://awslabs.github.io/mcp/servers/aws-diagram-mcp-server),
-        the generate_diagram tool expects Python code using the diagrams library.
+        According to AWS Diagram MCP Server documentation, the generate_diagram tool:
+        - Expects Python code using ONLY the diagrams library
+        - The code parameter should contain ONLY the Python code (no markdown, no explanations)
+        - The tool executes the code in a sandboxed environment with diagrams library pre-imported
         
-        The Python code format MUST be:
-        ```python
-        from diagrams import Diagram
-        from diagrams.aws.compute import Lambda
-        from diagrams.aws.storage import S3
-        from diagrams.aws.network import APIGateway
-        
-        with Diagram("Architecture Name", show=False):
-            api = APIGateway("API Gateway")
-            func = Lambda("Function")
-            storage = S3("Storage")
-            api >> func >> storage
-        ```
-        
-        IMPORTANT:
-        - The tool expects RAW Python code as a string parameter
-        - Do NOT wrap it in markdown code blocks (```python)
-        - Do NOT include explanations or comments
+        CRITICAL REQUIREMENTS:
+        - You MUST call get_diagram_examples FIRST to see the exact format
+        - Use ONLY imports from the diagrams library (from diagrams import Diagram, from diagrams.aws.*)
+        - Do NOT include ANY other imports (no os, sys, re, json, etc.)
+        - Do NOT include any comments or explanations in the code
+        - Do NOT wrap the code in markdown code blocks when calling the tool
+        - The code must be a clean Python string matching the examples exactly
         - Use show=False in Diagram() constructor
-        - Use >> operator for connections
-        - Import from diagrams.aws.* modules (not diagrams.aws directly)
+        - Use >> operator for connections between services
         
         WORKFLOW:
-        1. Summarize the architecture requirements to extract key services
-        2. Identify the BEST single architecture pattern (not multiple options)
-        3. Call get_diagram_examples to see format
-        4. Call generate_diagram with complete Python code matching the format
+        1. Call get_diagram_examples tool to see example formats
+        2. Review the examples to understand the exact code structure required
+        3. Summarize the architecture requirements to extract key AWS services
+        4. Identify the BEST single architecture pattern (not multiple options)
+        5. Write Python code following the EXACT format from the examples
+        6. Call generate_diagram with ONLY the Python code string (no markdown, no comments)
         
         DO:
-        - Call get_diagram_examples first
-        - Pass raw Python code string to generate_diagram
+        - ALWAYS call get_diagram_examples first
+        - Match the exact format shown in the examples
+        - Use only diagrams library imports
+        - Pass clean Python code string to generate_diagram tool
         - Include all services from the architecture summary
-        - Show all connections between services
-        - Use proper diagrams library syntax
+        - Show all connections between services using >> operator
         
         DO NOT:
-        - Include markdown formatting in tool call
+        - Skip calling get_diagram_examples
+        - Include any imports other than diagrams library
+        - Include markdown formatting (```python) in tool call
+        - Add comments, explanations, or docstrings in the code
         - Generate multiple architecture options (choose ONE best)
-        - Add explanations or comments in the code
-        - Use incorrect import syntax
+        - Use any Python standard library imports
+        - Include any code that isn't directly related to diagram generation
         
         For knowledge sharing mode, DO NOT generate CloudFormation templates, diagrams, or cost estimates.
         Focus exclusively on knowledge sharing, guidance, and conceptual understanding.
