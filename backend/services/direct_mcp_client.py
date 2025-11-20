@@ -73,14 +73,37 @@ class DirectMCPClient:
             logger.warning(f"Command '{command}' not found in PATH, will use fallback if available")
             raise FileNotFoundError(f"Command '{command}' not found")
         
-        # Build environment
-        env_config = {
+        # Build environment - inherit current environment and extend it
+        # This ensures PATH and other critical vars are available to uvx/downloaded scripts
+        env_config = os.environ.copy()
+        
+        # Set MCP-specific environment variables
+        env_config.update({
             "FASTMCP_LOG_LEVEL": "ERROR",
             "AWS_REGION": os.getenv('AWS_REGION', 'us-east-1'),
             "AWS_PROFILE": os.getenv('AWS_PROFILE', 'default')
-        }
+        })
         
-        # Add any custom env vars from config
+        # Ensure PATH includes standard locations for utilities like realpath, dirname
+        # These are needed by uvx-downloaded MCP server wrappers
+        standard_paths = [
+            "/usr/bin",
+            "/bin",
+            "/usr/local/bin",
+            "/usr/sbin",
+            "/sbin"
+        ]
+        current_path = env_config.get("PATH", "")
+        path_parts = current_path.split(os.pathsep) if current_path else []
+        
+        # Add standard paths if not already present
+        for std_path in standard_paths:
+            if std_path not in path_parts:
+                path_parts.insert(0, std_path)  # Prepend to ensure they're found first
+        
+        env_config["PATH"] = os.pathsep.join(path_parts)
+        
+        # Add any custom env vars from config (these override defaults)
         if "env" in server_config:
             env_config.update(server_config["env"])
         

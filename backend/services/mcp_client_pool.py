@@ -86,7 +86,14 @@ class MCPClientPool:
                         )
                         return client
                     except Exception as e:
-                        logger.error(f"Failed to create MCP client: {e}")
+                        # Log detailed error information for debugging
+                        import traceback
+                        error_details = traceback.format_exc()
+                        logger.error(
+                            f"Failed to create MCP client for '{self.server_name}': {e}\n"
+                            f"Server config: {self.server_config}\n"
+                            f"Traceback: {error_details}"
+                        )
                         raise
             
             # Wait for available client
