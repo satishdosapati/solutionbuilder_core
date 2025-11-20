@@ -1980,8 +1980,22 @@ class MCPKnowledgeAgent:
                     # Extract text from content blocks
                     content_parts = []
                     for block in response.message['content']:
-                        if isinstance(block, dict) and 'text' in block:
-                            content_parts.append(block['text'])
+                        if isinstance(block, dict):
+                            # Check for tool use results (diagram tool responses)
+                            if 'tool_use_id' in block or 'type' in block:
+                                # Tool response - extract SVG if present
+                                if isinstance(block.get('text'), str) and '<svg' in block['text']:
+                                    import re
+                                    svg_match = re.search(r'<svg[^>]*>.*?</svg>', block['text'], re.DOTALL | re.IGNORECASE)
+                                    if svg_match:
+                                        content_parts.append(svg_match.group(0))
+                                        logger.info("Extracted SVG from tool response")
+                                    else:
+                                        content_parts.append(block['text'])
+                                elif 'text' in block:
+                                    content_parts.append(block['text'])
+                            elif 'text' in block:
+                                content_parts.append(block['text'])
                     content = '\n'.join(content_parts)
                 elif isinstance(response.message['content'], str):
                     content = response.message['content']
@@ -1989,6 +2003,21 @@ class MCPKnowledgeAgent:
                 content = str(response.content)
             else:
                 content = str(response)
+            
+            # If mode is diagram, try to extract SVG from content
+            if inputs.get("mode") == "diagram" and content:
+                import re
+                # Look for SVG in the content
+                svg_match = re.search(r'<svg[^>]*>.*?</svg>', content, re.DOTALL | re.IGNORECASE)
+                if svg_match:
+                    content = svg_match.group(0)
+                    logger.info("Extracted SVG diagram from agent response")
+                # Also check for base64 images
+                elif "data:image" in content:
+                    base64_match = re.search(r'data:image/[^;]+;base64,[^\s"\'<>]+', content)
+                    if base64_match:
+                        content = base64_match.group(0)
+                        logger.info("Extracted base64 image from agent response")
 
             return {
                 "content": content,

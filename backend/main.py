@@ -247,20 +247,25 @@ Follow-up questions:
         diagram_server = ["aws-diagram-server"]
         diagram_agent = MCPKnowledgeAgent("aws-diagram", diagram_server)
         
-        diagram_prompt = f"""Generate an architecture diagram for these requirements:
+                diagram_prompt = f"""Generate an architecture diagram for these requirements:
 
 Requirements: {request.requirements}
 
 Analysis Summary:
 {analysis_content[:2000]}
 
+IMPORTANT: Use the generate_diagram tool to create the diagram. Follow these steps:
+1. Call get_diagram_examples to see the format
+2. Call generate_diagram with Python code using the diagrams library
+3. The tool will return SVG content - return it directly
+
 Create diagram showing:
 - Recommended AWS services
-- Service connections and interactions
+- Service connections and interactions  
 - Data flow between components
 - Overall architecture pattern
 
-Generate the best single architecture solution."""
+Generate the best single architecture solution using the generate_diagram tool."""
         
         diagram_inputs = {
             "requirements": request.requirements,
@@ -271,35 +276,51 @@ Generate the best single architecture solution."""
         diagram_result = await diagram_agent.execute(diagram_inputs)
         diagram_content = diagram_result.get("content", "")
         
-        # Extract diagram content - might be embedded in text response
-        # Look for common diagram formats (Mermaid, SVG, base64, etc.)
+        # Extract diagram content - prioritize SVG from tool responses
         if diagram_content:
-            # Check if content contains diagram markers
-            if "```mermaid" in diagram_content:
-                # Extract Mermaid diagram
-                import re
+            import re
+            # First, try to extract SVG directly (from tool response)
+            svg_match = re.search(r'<svg[^>]*>.*?</svg>', diagram_content, re.DOTALL | re.IGNORECASE)
+            if svg_match:
+                diagram_content = svg_match.group(0)
+                logger.info("Extracted SVG diagram from tool response")
+            # Try base64 image data
+            elif "data:image" in diagram_content or "base64" in diagram_content:
+                base64_match = re.search(r'data:image/[^;]+;base64,[^\s"\'<>]+', diagram_content)
+                if base64_match:
+                    diagram_content = base64_match.group(0)
+                    logger.info("Extracted base64 image from response")
+            # Try Mermaid format
+            elif "```mermaid" in diagram_content:
                 mermaid_match = re.search(r'```mermaid\n(.*?)\n```', diagram_content, re.DOTALL)
                 if mermaid_match:
                     diagram_content = mermaid_match.group(1)
                     logger.info("Extracted Mermaid diagram from response")
-            elif "data:image" in diagram_content or "base64" in diagram_content:
-                # Already in correct format
-                logger.info("Diagram content appears to be in image format")
+            # Try extracting from code blocks
             elif "```" in diagram_content:
-                # Try to extract any code block
-                import re
                 code_match = re.search(r'```(?:\w+)?\n(.*?)\n```', diagram_content, re.DOTALL)
                 if code_match:
-                    diagram_content = code_match.group(1)
-                    logger.info("Extracted diagram from code block")
+                    extracted = code_match.group(1)
+                    # Check if extracted content is SVG
+                    if "<svg" in extracted:
+                        svg_match = re.search(r'<svg[^>]*>.*?</svg>', extracted, re.DOTALL | re.IGNORECASE)
+                        if svg_match:
+                            diagram_content = svg_match.group(0)
+                            logger.info("Extracted SVG from code block")
+                    else:
+                        diagram_content = extracted
+                        logger.info("Extracted diagram from code block")
         
         logger.info(f"Diagram generation completed: {len(diagram_content)} characters")
-        logger.info(f"Diagram content preview: {diagram_content[:500] if diagram_content else 'Empty'}")
+        logger.info(f"Diagram content preview: {diagram_content[:200] if diagram_content else 'Empty'}")
         
         # Log if diagram generation failed
         if not diagram_content or len(diagram_content) < 50:
             logger.warning("Diagram content appears to be empty or too short - diagram generation may have failed")
-            logger.warning(f"Full diagram result: {diagram_result}")
+            logger.warning(f"Full diagram result keys: {list(diagram_result.keys()) if isinstance(diagram_result, dict) else 'Not a dict'}")
+            logger.warning(f"Diagram result content type: {type(diagram_content)}")
+            if isinstance(diagram_result, dict):
+                logger.warning(f"Diagram result: {str(diagram_result)[:500]}")
         
         return {
             "mode": "analysis",
@@ -908,22 +929,25 @@ async def stream_analyze(request: GenerationRequest, session_id: Optional[str] =
                 diagram_agent = MCPKnowledgeAgent("aws-diagram", diagram_server)
                 await diagram_agent.initialize()
                 
-                diagram_prompt = f"""
-                Based on the following requirements and analysis, generate an architecture diagram showing the recommended AWS architecture.
-                
-                User Requirements: {request.requirements}
-                
-                Knowledge Analysis Summary:
-                {analysis_content[:2000]}
-                
-                Please create a diagram that visualizes:
-                - All AWS services recommended in the analysis
-                - How the services connect and interact
-                - The data flow between components
-                - The overall architecture pattern
-                
-                Generate the best single architecture solution based on the analysis above.
-                """
+                diagram_prompt = f"""Generate an architecture diagram for these requirements:
+
+Requirements: {request.requirements}
+
+Analysis Summary:
+{analysis_content[:2000]}
+
+IMPORTANT: Use the generate_diagram tool to create the diagram. Follow these steps:
+1. Call get_diagram_examples to see the format
+2. Call generate_diagram with Python code using the diagrams library
+3. The tool will return SVG content - return it directly
+
+Create diagram showing:
+- Recommended AWS services
+- Service connections and interactions
+- Data flow between components
+- Overall architecture pattern
+
+Generate the best single architecture solution using the generate_diagram tool."""
                 
                 diagram_inputs = {
                     "requirements": request.requirements,
@@ -934,26 +958,48 @@ async def stream_analyze(request: GenerationRequest, session_id: Optional[str] =
                 diagram_result = await diagram_agent.execute(diagram_inputs)
                 diagram_content = diagram_result.get("content", "")
                 
-                # Extract diagram content if embedded
+                # Extract diagram content - prioritize SVG from tool responses
                 if diagram_content:
-                    if "```mermaid" in diagram_content:
-                        import re
+                    import re
+                    # First, try to extract SVG directly (from tool response)
+                    svg_match = re.search(r'<svg[^>]*>.*?</svg>', diagram_content, re.DOTALL | re.IGNORECASE)
+                    if svg_match:
+                        diagram_content = svg_match.group(0)
+                        logger.info("Extracted SVG diagram from tool response")
+                    # Try base64 image data
+                    elif "data:image" in diagram_content or "base64" in diagram_content:
+                        base64_match = re.search(r'data:image/[^;]+;base64,[^\s"\'<>]+', diagram_content)
+                        if base64_match:
+                            diagram_content = base64_match.group(0)
+                            logger.info("Extracted base64 image from response")
+                    # Try Mermaid format
+                    elif "```mermaid" in diagram_content:
                         mermaid_match = re.search(r'```mermaid\n(.*?)\n```', diagram_content, re.DOTALL)
                         if mermaid_match:
                             diagram_content = mermaid_match.group(1)
                             logger.info("Extracted Mermaid diagram from response")
+                    # Try extracting from code blocks
                     elif "```" in diagram_content:
-                        import re
                         code_match = re.search(r'```(?:\w+)?\n(.*?)\n```', diagram_content, re.DOTALL)
                         if code_match:
-                            diagram_content = code_match.group(1)
-                            logger.info("Extracted diagram from code block")
+                            extracted = code_match.group(1)
+                            # Check if extracted content is SVG
+                            if "<svg" in extracted:
+                                svg_match = re.search(r'<svg[^>]*>.*?</svg>', extracted, re.DOTALL | re.IGNORECASE)
+                                if svg_match:
+                                    diagram_content = svg_match.group(0)
+                                    logger.info("Extracted SVG from code block")
+                            else:
+                                diagram_content = extracted
+                                logger.info("Extracted diagram from code block")
                 
-                # Send diagram
+                # Log diagram content info for debugging
                 if diagram_content:
+                    logger.info(f"Diagram extracted: {len(diagram_content)} chars, starts with: {diagram_content[:100]}")
+                    # Send diagram
                     yield f"data: {json.dumps({'type': 'diagram', 'diagram': diagram_content})}\n\n"
                 else:
-                    logger.warning("No diagram content generated")
+                    logger.warning(f"No diagram content generated. Full result: {diagram_result}")
                     yield f"data: {json.dumps({'type': 'diagram', 'diagram': '', 'error': 'Diagram generation returned empty content'})}\n\n"
                     
             except Exception as e:
