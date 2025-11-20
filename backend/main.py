@@ -256,12 +256,15 @@ Analysis Summary:
 
 IMPORTANT: Use the AWS Diagram MCP Server tools to create the diagram. Follow these EXACT steps:
 1. FIRST: Call 'get_diagram_examples' tool to see the exact format and examples
-2. Review the examples carefully to understand the required code structure
-3. THEN: Call 'generate_diagram' tool with Python code matching the examples exactly
-4. The tool expects ONLY Python code using the diagrams library (no other imports, no comments)
-5. The tool will return SVG content - return it directly
+2. Review the examples CAREFULLY to see:
+   - Whether import statements are included or not
+   - The exact code structure and format
+3. THEN: Call 'generate_diagram' tool with Python code matching the examples EXACTLY
+4. Match the examples precisely - if examples show imports, include them; if not, don't include them
+5. The tool expects ONLY Python code (no markdown, no comments, no explanations)
+6. The tool will return SVG content - return it directly
 
-CRITICAL: You MUST call get_diagram_examples FIRST before calling generate_diagram. Use ONLY the diagrams library imports shown in the examples.
+CRITICAL: You MUST call get_diagram_examples FIRST. Match the examples EXACTLY - don't guess whether imports are needed.
 
 Create diagram showing:
 - Recommended AWS services

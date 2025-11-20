@@ -1777,11 +1777,12 @@ class MCPKnowledgeAgent:
         According to AWS Diagram MCP Server documentation, the generate_diagram tool:
         - Expects Python code using ONLY the diagrams library
         - The code parameter should contain ONLY the Python code (no markdown, no explanations)
-        - The tool executes the code in a sandboxed environment with diagrams library pre-imported
+        - The tool executes the code in a sandboxed environment
         
         CRITICAL REQUIREMENTS:
         - You MUST call get_diagram_examples FIRST to see the exact format
-        - Use ONLY imports from the diagrams library (from diagrams import Diagram, from diagrams.aws.*)
+        - Match the examples EXACTLY - if examples show imports, include them; if examples don't show imports, don't include them
+        - The tool may pre-import the diagrams library - check the examples to see if imports are needed
         - Do NOT include ANY other imports (no os, sys, re, json, etc.)
         - Do NOT include any comments or explanations in the code
         - Do NOT wrap the code in markdown code blocks when calling the tool
@@ -1790,29 +1791,36 @@ class MCPKnowledgeAgent:
         - Use >> operator for connections between services
         
         WORKFLOW:
-        1. Call get_diagram_examples tool to see example formats
-        2. Review the examples to understand the exact code structure required
+        1. Call get_diagram_examples tool FIRST to see example formats
+        2. Review the examples CAREFULLY to understand:
+           - Whether imports are included or not
+           - The exact code structure and format
+           - How services are imported and used
         3. Summarize the architecture requirements to extract key AWS services
         4. Identify the BEST single architecture pattern (not multiple options)
-        5. Write Python code following the EXACT format from the examples
-        6. Call generate_diagram with ONLY the Python code string (no markdown, no comments)
+        5. Write Python code following the EXACT format from the examples (including whether imports are present or not)
+        6. Call generate_diagram with ONLY the Python code string (no markdown, no comments, no explanations)
         
         DO:
-        - ALWAYS call get_diagram_examples first
-        - Match the exact format shown in the examples
-        - Use only diagrams library imports
+        - ALWAYS call get_diagram_examples first - this is MANDATORY
+        - Match the EXACT format shown in the examples (including import statements if examples show them)
+        - If examples show imports like "from diagrams import Diagram", include them
+        - If examples show imports like "from diagrams.aws.compute import Lambda", include them
+        - If examples DON'T show imports, don't include them (library may be pre-imported)
         - Pass clean Python code string to generate_diagram tool
         - Include all services from the architecture summary
         - Show all connections between services using >> operator
         
         DO NOT:
-        - Skip calling get_diagram_examples
-        - Include any imports other than diagrams library
+        - Skip calling get_diagram_examples - this will cause errors
+        - Include imports if the examples don't show them
+        - Omit imports if the examples show them
         - Include markdown formatting (```python) in tool call
         - Add comments, explanations, or docstrings in the code
         - Generate multiple architecture options (choose ONE best)
         - Use any Python standard library imports
         - Include any code that isn't directly related to diagram generation
+        - Guess the format - always check examples first
         
         For knowledge sharing mode, DO NOT generate CloudFormation templates, diagrams, or cost estimates.
         Focus exclusively on knowledge sharing, guidance, and conceptual understanding.
