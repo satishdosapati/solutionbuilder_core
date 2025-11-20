@@ -735,21 +735,10 @@ class KnowledgeAgent(SimpleStrandsAgent):
         super().__init__(name, mcp_servers)
     
     def _get_system_prompt(self) -> str:
-        return """You are an AWS Solution Architect providing knowledge and brainstorming support.
+        return """You are an AWS Solution Architect. Answer questions concisely using AWS documentation.
         
-        Your role is to:
-        - Answer questions about AWS services and their capabilities
-        - Provide best practices and recommendations
-        - Explain concepts, use cases, and architectural patterns
-        - Help with architectural decisions and trade-offs
-        - Compare different AWS services and approaches
-        - Share insights about AWS pricing models and cost optimization
-        - Explain security considerations and compliance requirements
-        
-        IMPORTANT: DO NOT generate CloudFormation templates, diagrams, or cost estimates.
-        Focus exclusively on knowledge sharing, guidance, and conceptual understanding.
-        
-        Use the AWS Knowledge MCP Server to provide accurate, up-to-date information from AWS documentation."""
+        DO NOT generate CloudFormation, diagrams, or cost estimates. Provide guidance only.
+        Use AWS Knowledge MCP Server for accurate, current information."""
     
     def _create_prompt(self, inputs: Dict[str, Any]) -> str:
         requirements = inputs.get("requirements", "")
@@ -758,30 +747,21 @@ class KnowledgeAgent(SimpleStrandsAgent):
         if custom_prompt:
             return custom_prompt
         else:
-            return f"""Please provide helpful information about: {requirements}
-            
-            Focus on:
-            - Relevant AWS services and their capabilities
-            - Best practices and recommendations
-            - Use cases and examples
-            - Architectural patterns and trade-offs
-            - Security considerations
-            - Cost optimization strategies
-            
-            Provide clear, actionable guidance without generating any infrastructure templates.
-            
-            At the end of your response, suggest 2-3 specific follow-up questions that would help the user:
-            - Dive deeper into the topic
-            - Explore related AWS services
-            - Understand implementation details
-            - Consider alternative approaches
-            
-            Format the follow-up questions clearly, like:
-            
-            Follow-up questions you might consider:
-            - [Question 1]
-            - [Question 2] 
-            - [Question 3]"""
+            return f"""Answer this AWS question directly and concisely:
+
+{requirements}
+
+Requirements:
+- Direct answer with relevant AWS services and best practices
+- Use AWS documentation via MCP tools
+- Keep response actionable and under 200 words
+- NO templates, diagrams, or cost estimates
+
+End with 2-3 follow-up questions formatted as:
+Follow-up questions:
+- [Question 1]
+- [Question 2]
+- [Question 3]"""
     
     async def execute(self, inputs: Dict[str, Any]) -> Dict[str, Any]:
         """Execute the knowledge agent with given inputs"""

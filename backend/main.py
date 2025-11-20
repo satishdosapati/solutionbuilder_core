@@ -141,34 +141,21 @@ async def brainstorm_aws_knowledge(request: GenerationRequest):
         knowledge_agent = MCPKnowledgeAgent("aws-knowledge", mcp_servers)
         
         # Create concise brainstorming-specific prompt with follow-up generation
-        brainstorming_prompt = f"""
-        You are an AWS Solution Architect providing concise, focused answers.
-        
-        User Question: {request.requirements}
-        
-        Provide a direct, helpful answer that:
-        - Directly addresses the user's question
-        - Includes relevant AWS services and best practices
-        - Keeps the response concise and actionable
-        - Uses up-to-date AWS information from the knowledge base
-        - Focuses on conceptual understanding and guidance
-        
-        IMPORTANT: Do NOT generate CloudFormation templates, diagrams, or cost estimates.
-        Focus on knowledge sharing and architectural guidance only.
-        
-        At the end of your response, suggest 2-3 specific follow-up questions that would help the user:
-        - Dive deeper into the topic
-        - Explore related AWS services
-        - Understand implementation details
-        - Consider alternative approaches
-        
-        Format the follow-up questions clearly, like:
-        
-        Follow-up questions you might consider:
-        - [Question 1]
-        - [Question 2] 
-        - [Question 3]
-        """
+        brainstorming_prompt = f"""Answer this AWS question directly and concisely:
+
+{request.requirements}
+
+Requirements:
+- Direct answer with relevant AWS services and best practices
+- Use AWS documentation via MCP tools
+- Keep response actionable and under 200 words
+- NO templates, diagrams, or cost estimates
+
+End with 2-3 follow-up questions formatted as:
+Follow-up questions:
+- [Question 1]
+- [Question 2]
+- [Question 3]"""
         
         # Execute only the knowledge agent
         agent_inputs = {
