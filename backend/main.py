@@ -247,7 +247,7 @@ Follow-up questions:
         diagram_server = ["aws-diagram-server"]
         diagram_agent = MCPKnowledgeAgent("aws-diagram", diagram_server)
         
-                diagram_prompt = f"""Generate an architecture diagram for these requirements:
+        diagram_prompt = f"""Generate an architecture diagram for these requirements:
 
 Requirements: {request.requirements}
 
