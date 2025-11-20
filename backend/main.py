@@ -256,15 +256,16 @@ Analysis Summary:
 
 IMPORTANT: Use the AWS Diagram MCP Server tools to create the diagram. Follow these EXACT steps:
 1. FIRST: Call 'get_diagram_examples' tool to see the exact format and examples
-2. Review the examples CAREFULLY to see:
-   - Whether import statements are included or not
-   - The exact code structure and format
+2. Review the examples CAREFULLY - they show code WITHOUT import statements
 3. THEN: Call 'generate_diagram' tool with Python code matching the examples EXACTLY
-4. Match the examples precisely - if examples show imports, include them; if not, don't include them
-5. The tool expects ONLY Python code (no markdown, no comments, no explanations)
-6. The tool will return SVG content - return it directly
+4. DO NOT include import statements - the diagrams library is pre-imported
+5. The tool expects ONLY Python code (no markdown, no comments, no explanations, no imports)
+6. The tool returns PNG image data - extract and return it directly
 
-CRITICAL: You MUST call get_diagram_examples FIRST. Match the examples EXACTLY - don't guess whether imports are needed.
+CRITICAL: 
+- You MUST call get_diagram_examples FIRST
+- DO NOT include imports - examples show code like: `with Diagram("Name", show=False):`
+- Match the examples EXACTLY - no imports needed
 
 Create diagram showing:
 - Recommended AWS services
@@ -284,18 +285,24 @@ Generate the best single architecture solution using the generate_diagram tool."
         diagram_content = diagram_result.get("content", "")
         architecture_explanation = diagram_result.get("architecture_explanation", "")
         
-        # Extract diagram content - prioritize SVG from tool responses
-        # Note: The agent should have already extracted SVG and explanation separately,
+        # Extract diagram content - prioritize PNG (from generate_diagram) or SVG from tool responses
+        # Note: The agent should have already extracted image and explanation separately,
         # but we'll do a final cleanup here for safety
         if diagram_content:
             import re
-            # First, try to extract SVG directly (from tool response)
-            # More robust SVG extraction
-            svg_match = re.search(r'<svg[^>]*>.*?</svg>', diagram_content, re.DOTALL | re.IGNORECASE)
-            if svg_match:
-                diagram_content = svg_match.group(0).strip()
-                logger.info(f"Extracted SVG diagram from tool response ({len(diagram_content)} chars)")
-            # Try base64 image data
+            # Priority 1: Look for base64 PNG image data (generate_diagram tool returns PNG)
+            base64_png_match = re.search(r'data:image/png;base64,([A-Za-z0-9+/=]+)', diagram_content, re.IGNORECASE)
+            if base64_png_match:
+                base64_data = base64_png_match.group(1)
+                diagram_content = f"data:image/png;base64,{base64_data}"
+                logger.info(f"Extracted PNG image from tool response ({len(diagram_content)} chars)")
+            # Priority 2: Try SVG directly (from tool response)
+            elif '<svg' in diagram_content.lower():
+                svg_match = re.search(r'<svg[^>]*>.*?</svg>', diagram_content, re.DOTALL | re.IGNORECASE)
+                if svg_match:
+                    diagram_content = svg_match.group(0).strip()
+                    logger.info(f"Extracted SVG diagram from tool response ({len(diagram_content)} chars)")
+            # Priority 3: Try any base64 image data (fallback)
             elif "data:image" in diagram_content.lower() or "base64" in diagram_content.lower():
                 base64_match = re.search(r'data:image/[^;]+;base64,[^\s"\'<>]+', diagram_content, re.IGNORECASE)
                 if base64_match:

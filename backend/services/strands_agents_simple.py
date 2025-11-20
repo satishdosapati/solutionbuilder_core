@@ -1774,21 +1774,23 @@ class MCPKnowledgeAgent:
         STEP 2: Review the examples carefully to understand the required code structure
         STEP 3: Call 'generate_diagram' tool with Python code matching the examples exactly
         
-        According to AWS Diagram MCP Server documentation, the generate_diagram tool:
-        - Expects Python code using ONLY the diagrams library
+        According to AWS Diagram MCP Server documentation and testing, the generate_diagram tool:
+        - Expects Python code using the diagrams library
         - The code parameter should contain ONLY the Python code (no markdown, no explanations)
-        - The tool executes the code in a sandboxed environment
+        - The tool executes the code in a sandboxed environment with diagrams library PRE-IMPORTED
+        - The tool generates PNG files (not SVG) - the response will contain image data
         
         CRITICAL REQUIREMENTS:
         - You MUST call get_diagram_examples FIRST to see the exact format
-        - Match the examples EXACTLY - if examples show imports, include them; if examples don't show imports, don't include them
-        - The tool may pre-import the diagrams library - check the examples to see if imports are needed
-        - Do NOT include ANY other imports (no os, sys, re, json, etc.)
+        - Based on examples: DO NOT include import statements - the diagrams library is pre-imported
+        - The examples show code WITHOUT imports like: `with Diagram("Name", show=False):`
+        - Do NOT include ANY imports (no "from diagrams import Diagram", etc.)
         - Do NOT include any comments or explanations in the code
         - Do NOT wrap the code in markdown code blocks when calling the tool
         - The code must be a clean Python string matching the examples exactly
         - Use show=False in Diagram() constructor
         - Use >> operator for connections between services
+        - The tool returns PNG image data, not SVG
         
         WORKFLOW:
         1. Call get_diagram_examples tool FIRST to see example formats
@@ -2033,45 +2035,60 @@ class MCPKnowledgeAgent:
                 logger.info(f"Raw content from agent response: {len(content)} chars, preview: {content[:200] if content else 'Empty'}")
                 logger.info(f"Content contains '<svg': {'<svg' in content.lower()}")
             
-            # If mode is diagram, extract SVG and preserve explanation text
-            diagram_svg = ""
+            # If mode is diagram, extract diagram image (PNG or SVG) and preserve explanation text
+            diagram_image = ""
             architecture_explanation = ""
             if inputs.get("mode") == "diagram" and content:
                 import re
                 # First, try to clean up content - remove markdown code blocks if present
                 cleaned_content = content
-                # Remove markdown code blocks that might wrap SVG
+                # Remove markdown code blocks that might wrap image data
                 if '```' in cleaned_content:
-                    # Try to extract SVG from markdown code blocks
-                    code_block_match = re.search(r'```(?:svg|xml|html)?\s*\n?(.*?)```', cleaned_content, re.DOTALL | re.IGNORECASE)
+                    # Try to extract from markdown code blocks
+                    code_block_match = re.search(r'```(?:svg|xml|html|png|image)?\s*\n?(.*?)```', cleaned_content, re.DOTALL | re.IGNORECASE)
                     if code_block_match:
                         cleaned_content = code_block_match.group(1)
                         logger.info("Extracted content from markdown code block")
                 
-                # Look for SVG in the content - use more robust regex
-                # Pattern: <svg followed by attributes, then content, then </svg>
-                svg_match = re.search(r'<svg[^>]*>.*?</svg>', cleaned_content, re.DOTALL | re.IGNORECASE)
-                if svg_match:
-                    diagram_svg = svg_match.group(0).strip()
-                    # Extract explanation text that comes after the SVG
-                    svg_end_pos = svg_match.end()
-                    explanation_text = cleaned_content[svg_end_pos:].strip()
-                    # Clean up the explanation text (remove any remaining SVG fragments or code blocks)
+                # Priority 1: Look for base64 image data (PNG from generate_diagram tool)
+                # The tool returns PNG images as base64 data URLs
+                base64_image_match = re.search(r'data:image/(png|jpeg|jpg|svg\+xml);base64,([A-Za-z0-9+/=]+)', cleaned_content, re.IGNORECASE)
+                if base64_image_match:
+                    image_type = base64_image_match.group(1).lower()
+                    base64_data = base64_image_match.group(2)
+                    diagram_image = f"data:image/{image_type};base64,{base64_data}"
+                    # Extract explanation text that comes after the image
+                    image_end_pos = base64_image_match.end()
+                    explanation_text = cleaned_content[image_end_pos:].strip()
                     if explanation_text:
-                        # Remove any trailing SVG tags or code blocks
-                        explanation_text = re.sub(r'</svg>.*', '', explanation_text, flags=re.DOTALL)
                         explanation_text = re.sub(r'```.*?```', '', explanation_text, flags=re.DOTALL)
+                        explanation_text = re.sub(r'data:image.*?base64,.*', '', explanation_text, flags=re.DOTALL | re.IGNORECASE)
                         explanation_text = explanation_text.strip()
-                        if explanation_text and len(explanation_text) > 10:  # Only keep substantial explanations
+                        if explanation_text and len(explanation_text) > 10:
                             architecture_explanation = explanation_text
-                    logger.info(f"Extracted SVG diagram ({len(diagram_svg)} chars) and explanation ({len(architecture_explanation)} chars) from agent response")
-                    content = diagram_svg  # Keep SVG as main content for backward compatibility
-                # Also check for base64 images
-                elif "data:image" in cleaned_content.lower():
+                    logger.info(f"Extracted base64 {image_type.upper()} image ({len(diagram_image)} chars) and explanation ({len(architecture_explanation)} chars)")
+                    content = diagram_image
+                # Priority 2: Look for SVG in the content
+                elif '<svg' in cleaned_content.lower():
+                    svg_match = re.search(r'<svg[^>]*>.*?</svg>', cleaned_content, re.DOTALL | re.IGNORECASE)
+                    if svg_match:
+                        diagram_image = svg_match.group(0).strip()
+                        # Extract explanation text that comes after the SVG
+                        svg_end_pos = svg_match.end()
+                        explanation_text = cleaned_content[svg_end_pos:].strip()
+                        if explanation_text:
+                            explanation_text = re.sub(r'</svg>.*', '', explanation_text, flags=re.DOTALL)
+                            explanation_text = re.sub(r'```.*?```', '', explanation_text, flags=re.DOTALL)
+                            explanation_text = explanation_text.strip()
+                            if explanation_text and len(explanation_text) > 10:
+                                architecture_explanation = explanation_text
+                        logger.info(f"Extracted SVG diagram ({len(diagram_image)} chars) and explanation ({len(architecture_explanation)} chars)")
+                        content = diagram_image
+                # Priority 3: Look for any base64 data (fallback)
+                elif "base64" in cleaned_content.lower():
                     base64_match = re.search(r'data:image/[^;]+;base64,[^\s"\'<>]+', cleaned_content, re.IGNORECASE)
                     if base64_match:
-                        diagram_svg = base64_match.group(0)
-                        # Extract explanation after base64 image
+                        diagram_image = base64_match.group(0)
                         base64_end_pos = base64_match.end()
                         explanation_text = cleaned_content[base64_end_pos:].strip()
                         if explanation_text:
@@ -2079,11 +2096,11 @@ class MCPKnowledgeAgent:
                             explanation_text = explanation_text.strip()
                             if explanation_text and len(explanation_text) > 10:
                                 architecture_explanation = explanation_text
-                        content = diagram_svg
-                        logger.info(f"Extracted base64 image ({len(diagram_svg)} chars) and explanation ({len(architecture_explanation)} chars) from agent response")
+                        content = diagram_image
+                        logger.info(f"Extracted base64 image (fallback) ({len(diagram_image)} chars) and explanation ({len(architecture_explanation)} chars)")
                 else:
-                    # No SVG found - log for debugging
-                    logger.warning(f"No SVG found in diagram mode content. Content length: {len(content)}, preview: {content[:300]}")
+                    # No image found - log for debugging
+                    logger.warning(f"No image (PNG/SVG) found in diagram mode content. Content length: {len(content)}, preview: {content[:300]}")
                     # Keep original content in case it's valid but not matching our patterns
                     content = cleaned_content
 
