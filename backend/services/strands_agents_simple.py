@@ -2001,26 +2001,50 @@ class MCPKnowledgeAgent:
             else:
                 content = str(response)
             
-            # If mode is diagram, try to extract SVG from content
+            # If mode is diagram, extract SVG and preserve explanation text
+            diagram_svg = ""
+            architecture_explanation = ""
             if inputs.get("mode") == "diagram" and content:
                 import re
                 # Look for SVG in the content
                 svg_match = re.search(r'<svg[^>]*>.*?</svg>', content, re.DOTALL | re.IGNORECASE)
                 if svg_match:
-                    content = svg_match.group(0)
-                    logger.info("Extracted SVG diagram from agent response")
+                    diagram_svg = svg_match.group(0)
+                    # Extract explanation text that comes after the SVG
+                    svg_end_pos = svg_match.end()
+                    explanation_text = content[svg_end_pos:].strip()
+                    # Clean up the explanation text (remove any remaining SVG fragments or code blocks)
+                    if explanation_text:
+                        # Remove any trailing SVG tags or code blocks
+                        explanation_text = re.sub(r'</svg>.*', '', explanation_text, flags=re.DOTALL)
+                        explanation_text = re.sub(r'```.*?```', '', explanation_text, flags=re.DOTALL)
+                        explanation_text = explanation_text.strip()
+                        if explanation_text:
+                            architecture_explanation = explanation_text
+                    logger.info(f"Extracted SVG diagram ({len(diagram_svg)} chars) and explanation ({len(architecture_explanation)} chars) from agent response")
+                    content = diagram_svg  # Keep SVG as main content for backward compatibility
                 # Also check for base64 images
                 elif "data:image" in content:
                     base64_match = re.search(r'data:image/[^;]+;base64,[^\s"\'<>]+', content)
                     if base64_match:
-                        content = base64_match.group(0)
-                        logger.info("Extracted base64 image from agent response")
+                        diagram_svg = base64_match.group(0)
+                        # Extract explanation after base64 image
+                        base64_end_pos = base64_match.end()
+                        explanation_text = content[base64_end_pos:].strip()
+                        if explanation_text:
+                            explanation_text = re.sub(r'```.*?```', '', explanation_text, flags=re.DOTALL)
+                            explanation_text = explanation_text.strip()
+                            if explanation_text:
+                                architecture_explanation = explanation_text
+                        content = diagram_svg
+                        logger.info(f"Extracted base64 image ({len(diagram_svg)} chars) and explanation ({len(architecture_explanation)} chars) from agent response")
 
             return {
                 "content": content,
                 "prompt_used": prompt,
                 "mcp_servers_used": self.mcp_servers,
-                "success": True
+                "success": True,
+                "architecture_explanation": architecture_explanation if inputs.get("mode") == "diagram" else None
             }
         except Exception as e:
             error_msg = str(e)

@@ -279,8 +279,11 @@ Generate the best single architecture solution using the generate_diagram tool."
         
         diagram_result = await diagram_agent.execute(diagram_inputs)
         diagram_content = diagram_result.get("content", "")
+        architecture_explanation = diagram_result.get("architecture_explanation", "")
         
         # Extract diagram content - prioritize SVG from tool responses
+        # Note: The agent should have already extracted SVG and explanation separately,
+        # but we'll do a final cleanup here for safety
         if diagram_content:
             import re
             # First, try to extract SVG directly (from tool response)
@@ -315,6 +318,10 @@ Generate the best single architecture solution using the generate_diagram tool."
                         diagram_content = extracted
                         logger.info("Extracted diagram from code block")
         
+        # Log architecture explanation if present
+        if architecture_explanation:
+            logger.info(f"Architecture explanation extracted: {len(architecture_explanation)} characters")
+        
         logger.info(f"Diagram generation completed: {len(diagram_content)} characters")
         logger.info(f"Diagram content preview: {diagram_content[:200] if diagram_content else 'Empty'}")
         
@@ -331,6 +338,7 @@ Generate the best single architecture solution using the generate_diagram tool."
             "question": request.requirements,
             "knowledge_response": analysis_content,
             "architecture_diagram": diagram_content,  # Use architecture_diagram for frontend compatibility
+            "architecture_explanation": architecture_explanation,  # Explanation text after diagram
             "mcp_servers_used": result.get("mcp_servers_used", analyze_servers),
             "response_type": "educational",
             "success": result.get("success", True),

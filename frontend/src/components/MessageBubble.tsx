@@ -368,6 +368,15 @@ const MessageBubble: React.FC<MessageBubbleProps> = ({ message, onActionClick })
                               <p className="text-sm text-gray-600 dark:text-gray-400">Diagram format not supported for display.</p>
                             )}
                           </div>
+                          {/* Architecture Explanation */}
+                          {message.context.result.architecture_explanation && (
+                            <div className="mt-4 p-4 bg-blue-50 dark:bg-blue-900/20 rounded-lg border border-blue-200 dark:border-blue-800">
+                              <h5 className="font-semibold text-gray-800 dark:text-gray-200 mb-2">📋 Architecture Explanation</h5>
+                              <div className="text-sm text-gray-700 dark:text-gray-300 whitespace-pre-wrap">
+                                {message.context.result.architecture_explanation}
+                              </div>
+                            </div>
+                          )}
                         </div>
                       );
                     })()}
@@ -474,6 +483,15 @@ const MessageBubble: React.FC<MessageBubbleProps> = ({ message, onActionClick })
                           </div>
                         )}
                       </div>
+                      {/* Architecture Explanation for analyze mode */}
+                      {message.context?.result?.architecture_explanation && (
+                        <div className="mt-4 p-4 bg-blue-50 dark:bg-blue-900/20 rounded-lg border border-blue-200 dark:border-blue-800">
+                          <h5 className="font-semibold text-gray-800 dark:text-gray-200 mb-2">📋 Architecture Explanation</h5>
+                          <div className="text-sm text-gray-700 dark:text-gray-300 whitespace-pre-wrap">
+                            {message.context.result.architecture_explanation}
+                          </div>
+                        </div>
+                      )}
                     </div>
                   </div>
                 );

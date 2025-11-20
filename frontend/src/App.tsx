@@ -506,6 +506,7 @@ function App() {
             streamingResult = result;
             streamingContent = result.knowledge_response || '';
             diagramContent = (result as any).architecture_diagram || '';
+            const architectureExplanation = (result as any).architecture_explanation || '';
             
             // Update the message with fallback result
             setConversationState(prev => {
@@ -517,7 +518,8 @@ function App() {
                   result: {
                     ...result,
                     knowledge_response: streamingContent,
-                    architecture_diagram: diagramContent
+                    architecture_diagram: diagramContent,
+                    architecture_explanation: architectureExplanation
                   },
                   enhanced_analysis: result.enhanced_analysis,
                   suggestions: generateSuggestions(result, currentMode),
@@ -555,7 +557,8 @@ function App() {
                 result: {
                   ...streamingResult,
                   knowledge_response: finalContent,
-                  architecture_diagram: diagramContent || streamingResult.architecture_diagram
+                  architecture_diagram: diagramContent || streamingResult.architecture_diagram,
+                  architecture_explanation: (streamingResult as any).architecture_explanation || ''
                 },
                 enhanced_analysis: streamingResult.enhanced_analysis,
                 suggestions: generateSuggestions(streamingResult, currentMode),
