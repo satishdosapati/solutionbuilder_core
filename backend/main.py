@@ -290,36 +290,61 @@ Generate the best single architecture solution using the generate_diagram tool."
         if diagram_content:
             import re
             # First, try to extract SVG directly (from tool response)
+            # More robust SVG extraction
             svg_match = re.search(r'<svg[^>]*>.*?</svg>', diagram_content, re.DOTALL | re.IGNORECASE)
             if svg_match:
-                diagram_content = svg_match.group(0)
-                logger.info("Extracted SVG diagram from tool response")
+                diagram_content = svg_match.group(0).strip()
+                logger.info(f"Extracted SVG diagram from tool response ({len(diagram_content)} chars)")
             # Try base64 image data
-            elif "data:image" in diagram_content or "base64" in diagram_content:
-                base64_match = re.search(r'data:image/[^;]+;base64,[^\s"\'<>]+', diagram_content)
+            elif "data:image" in diagram_content.lower() or "base64" in diagram_content.lower():
+                base64_match = re.search(r'data:image/[^;]+;base64,[^\s"\'<>]+', diagram_content, re.IGNORECASE)
                 if base64_match:
                     diagram_content = base64_match.group(0)
                     logger.info("Extracted base64 image from response")
-            # Try Mermaid format
+            # Try extracting from markdown code blocks (might wrap SVG)
+            elif "```" in diagram_content:
+                # Try SVG/XML/HTML code blocks first
+                svg_code_match = re.search(r'```(?:svg|xml|html)?\s*\n?(.*?)```', diagram_content, re.DOTALL | re.IGNORECASE)
+                if svg_code_match:
+                    extracted = svg_code_match.group(1).strip()
+                    # Check if extracted content is SVG
+                    if "<svg" in extracted.lower():
+                        svg_match = re.search(r'<svg[^>]*>.*?</svg>', extracted, re.DOTALL | re.IGNORECASE)
+                        if svg_match:
+                            diagram_content = svg_match.group(0).strip()
+                            logger.info(f"Extracted SVG from code block ({len(diagram_content)} chars)")
+                        else:
+                            diagram_content = extracted
+                            logger.info("Extracted content from SVG code block")
+                    else:
+                        diagram_content = extracted
+                        logger.info("Extracted content from code block")
+                else:
+                    # Try generic code block
+                    code_match = re.search(r'```(?:\w+)?\n?(.*?)```', diagram_content, re.DOTALL)
+                    if code_match:
+                        extracted = code_match.group(1).strip()
+                        # Check if extracted content is SVG
+                        if "<svg" in extracted.lower():
+                            svg_match = re.search(r'<svg[^>]*>.*?</svg>', extracted, re.DOTALL | re.IGNORECASE)
+                            if svg_match:
+                                diagram_content = svg_match.group(0).strip()
+                                logger.info(f"Extracted SVG from generic code block ({len(diagram_content)} chars)")
+                            else:
+                                diagram_content = extracted
+                        else:
+                            diagram_content = extracted
+                            logger.info("Extracted diagram from code block")
+            # Try Mermaid format (fallback)
             elif "```mermaid" in diagram_content:
                 mermaid_match = re.search(r'```mermaid\n(.*?)\n```', diagram_content, re.DOTALL)
                 if mermaid_match:
                     diagram_content = mermaid_match.group(1)
                     logger.info("Extracted Mermaid diagram from response")
-            # Try extracting from code blocks
-            elif "```" in diagram_content:
-                code_match = re.search(r'```(?:\w+)?\n(.*?)\n```', diagram_content, re.DOTALL)
-                if code_match:
-                    extracted = code_match.group(1)
-                    # Check if extracted content is SVG
-                    if "<svg" in extracted:
-                        svg_match = re.search(r'<svg[^>]*>.*?</svg>', extracted, re.DOTALL | re.IGNORECASE)
-                        if svg_match:
-                            diagram_content = svg_match.group(0)
-                            logger.info("Extracted SVG from code block")
-                    else:
-                        diagram_content = extracted
-                        logger.info("Extracted diagram from code block")
+        
+        # Final validation - ensure we have valid SVG
+        if diagram_content and not diagram_content.strip().startswith('<svg') and not diagram_content.strip().startswith('data:image'):
+            logger.warning(f"Diagram content doesn't appear to be valid SVG or image. Length: {len(diagram_content)}, Preview: {diagram_content[:200]}")
         
         # Log architecture explanation if present
         if architecture_explanation:

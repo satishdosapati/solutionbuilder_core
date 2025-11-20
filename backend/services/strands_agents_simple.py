@@ -1987,18 +1987,37 @@ class MCPKnowledgeAgent:
                     for block in response.message['content']:
                         if isinstance(block, dict):
                             # Check for tool use results (diagram tool responses)
-                            if 'tool_use_id' in block or 'type' in block:
+                            if 'tool_use_id' in block or block.get('type') == 'tool_result':
                                 # Tool response - extract SVG if present
-                                if isinstance(block.get('text'), str) and '<svg' in block['text']:
-                                    import re
-                                    svg_match = re.search(r'<svg[^>]*>.*?</svg>', block['text'], re.DOTALL | re.IGNORECASE)
-                                    if svg_match:
-                                        content_parts.append(svg_match.group(0))
-                                        logger.info("Extracted SVG from tool response")
+                                block_text = block.get('text') or block.get('content') or ''
+                                if isinstance(block_text, str):
+                                    # Check for SVG in tool response
+                                    if '<svg' in block_text.lower():
+                                        import re
+                                        # More robust SVG extraction - handle whitespace and newlines
+                                        svg_match = re.search(r'<svg[^>]*>.*?</svg>', block_text, re.DOTALL | re.IGNORECASE)
+                                        if svg_match:
+                                            svg_content = svg_match.group(0)
+                                            content_parts.append(svg_content)
+                                            logger.info(f"Extracted SVG from tool response ({len(svg_content)} chars)")
+                                        else:
+                                            # Try to find SVG even if malformed
+                                            svg_start = block_text.lower().find('<svg')
+                                            if svg_start >= 0:
+                                                # Extract from SVG start to end of string or next tag
+                                                potential_svg = block_text[svg_start:]
+                                                # Try to find closing tag
+                                                svg_end = potential_svg.rfind('</svg>')
+                                                if svg_end > 0:
+                                                    svg_content = potential_svg[:svg_end + 6]
+                                                    content_parts.append(svg_content)
+                                                    logger.info(f"Extracted SVG using fallback method ({len(svg_content)} chars)")
+                                                else:
+                                                    content_parts.append(block_text)
+                                            else:
+                                                content_parts.append(block_text)
                                     else:
-                                        content_parts.append(block['text'])
-                                elif 'text' in block:
-                                    content_parts.append(block['text'])
+                                        content_parts.append(block_text)
                             elif 'text' in block:
                                 content_parts.append(block['text'])
                     content = '\n'.join(content_parts)
@@ -2009,43 +2028,64 @@ class MCPKnowledgeAgent:
             else:
                 content = str(response)
             
+            # Log content preview for debugging
+            if inputs.get("mode") == "diagram":
+                logger.info(f"Raw content from agent response: {len(content)} chars, preview: {content[:200] if content else 'Empty'}")
+                logger.info(f"Content contains '<svg': {'<svg' in content.lower()}")
+            
             # If mode is diagram, extract SVG and preserve explanation text
             diagram_svg = ""
             architecture_explanation = ""
             if inputs.get("mode") == "diagram" and content:
                 import re
-                # Look for SVG in the content
-                svg_match = re.search(r'<svg[^>]*>.*?</svg>', content, re.DOTALL | re.IGNORECASE)
+                # First, try to clean up content - remove markdown code blocks if present
+                cleaned_content = content
+                # Remove markdown code blocks that might wrap SVG
+                if '```' in cleaned_content:
+                    # Try to extract SVG from markdown code blocks
+                    code_block_match = re.search(r'```(?:svg|xml|html)?\s*\n?(.*?)```', cleaned_content, re.DOTALL | re.IGNORECASE)
+                    if code_block_match:
+                        cleaned_content = code_block_match.group(1)
+                        logger.info("Extracted content from markdown code block")
+                
+                # Look for SVG in the content - use more robust regex
+                # Pattern: <svg followed by attributes, then content, then </svg>
+                svg_match = re.search(r'<svg[^>]*>.*?</svg>', cleaned_content, re.DOTALL | re.IGNORECASE)
                 if svg_match:
-                    diagram_svg = svg_match.group(0)
+                    diagram_svg = svg_match.group(0).strip()
                     # Extract explanation text that comes after the SVG
                     svg_end_pos = svg_match.end()
-                    explanation_text = content[svg_end_pos:].strip()
+                    explanation_text = cleaned_content[svg_end_pos:].strip()
                     # Clean up the explanation text (remove any remaining SVG fragments or code blocks)
                     if explanation_text:
                         # Remove any trailing SVG tags or code blocks
                         explanation_text = re.sub(r'</svg>.*', '', explanation_text, flags=re.DOTALL)
                         explanation_text = re.sub(r'```.*?```', '', explanation_text, flags=re.DOTALL)
                         explanation_text = explanation_text.strip()
-                        if explanation_text:
+                        if explanation_text and len(explanation_text) > 10:  # Only keep substantial explanations
                             architecture_explanation = explanation_text
                     logger.info(f"Extracted SVG diagram ({len(diagram_svg)} chars) and explanation ({len(architecture_explanation)} chars) from agent response")
                     content = diagram_svg  # Keep SVG as main content for backward compatibility
                 # Also check for base64 images
-                elif "data:image" in content:
-                    base64_match = re.search(r'data:image/[^;]+;base64,[^\s"\'<>]+', content)
+                elif "data:image" in cleaned_content.lower():
+                    base64_match = re.search(r'data:image/[^;]+;base64,[^\s"\'<>]+', cleaned_content, re.IGNORECASE)
                     if base64_match:
                         diagram_svg = base64_match.group(0)
                         # Extract explanation after base64 image
                         base64_end_pos = base64_match.end()
-                        explanation_text = content[base64_end_pos:].strip()
+                        explanation_text = cleaned_content[base64_end_pos:].strip()
                         if explanation_text:
                             explanation_text = re.sub(r'```.*?```', '', explanation_text, flags=re.DOTALL)
                             explanation_text = explanation_text.strip()
-                            if explanation_text:
+                            if explanation_text and len(explanation_text) > 10:
                                 architecture_explanation = explanation_text
                         content = diagram_svg
                         logger.info(f"Extracted base64 image ({len(diagram_svg)} chars) and explanation ({len(architecture_explanation)} chars) from agent response")
+                else:
+                    # No SVG found - log for debugging
+                    logger.warning(f"No SVG found in diagram mode content. Content length: {len(content)}, preview: {content[:300]}")
+                    # Keep original content in case it's valid but not matching our patterns
+                    content = cleaned_content
 
             return {
                 "content": content,

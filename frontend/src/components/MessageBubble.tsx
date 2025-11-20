@@ -353,20 +353,34 @@ const MessageBubble: React.FC<MessageBubbleProps> = ({ message, onActionClick })
                             </button>
                           </div>
                           <div className="bg-white dark:bg-gray-800 rounded-lg p-3 border border-gray-200 dark:border-gray-600">
-                            {message.context.result.architecture_diagram.startsWith('<svg') ? (
-                              <div
-                                className="w-full"
-                                dangerouslySetInnerHTML={{ __html: message.context.result.architecture_diagram }}
-                              />
-                            ) : message.context.result.architecture_diagram.startsWith('data:image') ? (
-                              <img
-                                src={message.context.result.architecture_diagram}
-                                alt="Architecture Diagram"
-                                className="w-full h-auto rounded"
-                              />
-                            ) : (
-                              <p className="text-sm text-gray-600 dark:text-gray-400">Diagram format not supported for display.</p>
-                            )}
+                            {(() => {
+                              const diagramContent = message.context.result.architecture_diagram.trim();
+                              const isSVG = diagramContent.toLowerCase().startsWith('<svg');
+                              const isBase64Image = diagramContent.toLowerCase().startsWith('data:image');
+                              
+                              if (isSVG) {
+                                return (
+                                  <div
+                                    className="w-full"
+                                    dangerouslySetInnerHTML={{ __html: diagramContent }}
+                                  />
+                                );
+                              } else if (isBase64Image) {
+                                return (
+                                  <img
+                                    src={diagramContent}
+                                    alt="Architecture Diagram"
+                                    className="w-full h-auto rounded"
+                                  />
+                                );
+                              } else {
+                                return (
+                                  <p className="text-sm text-gray-600 dark:text-gray-400">
+                                    Diagram format not supported for display. (Length: {diagramContent.length} chars)
+                                  </p>
+                                );
+                              }
+                            })()}
                           </div>
                           {/* Architecture Explanation */}
                           {message.context.result.architecture_explanation && (
@@ -466,22 +480,46 @@ const MessageBubble: React.FC<MessageBubbleProps> = ({ message, onActionClick })
                     </div>
                     <div className="border border-gray-200 dark:border-gray-600 rounded-lg p-4 bg-white dark:bg-gray-800">
                       <div className="flex justify-center items-center min-h-[300px]">
-                        {message.context.result.architecture_diagram.startsWith('<svg') ? (
-                          <div 
-                            className="max-w-full max-h-[500px] overflow-auto"
-                            dangerouslySetInnerHTML={{ __html: message.context.result.architecture_diagram }}
-                          />
-                        ) : message.context.result.architecture_diagram.startsWith('data:image') ? (
-                          <img
-                            src={message.context.result.architecture_diagram}
-                            alt="Architecture Diagram"
-                            className="max-w-full h-auto rounded-lg"
-                          />
-                        ) : (
-                          <div className="text-gray-500 dark:text-gray-400">
-                            <p>Diagram format not supported for display.</p>
-                          </div>
-                        )}
+                        {(() => {
+                          const diagramContent = message.context.result.architecture_diagram.trim();
+                          const isSVG = diagramContent.toLowerCase().startsWith('<svg');
+                          const isBase64Image = diagramContent.toLowerCase().startsWith('data:image');
+                          
+                          if (isSVG) {
+                            return (
+                              <div 
+                                className="max-w-full max-h-[500px] overflow-auto"
+                                dangerouslySetInnerHTML={{ __html: diagramContent }}
+                              />
+                            );
+                          } else if (isBase64Image) {
+                            return (
+                              <img
+                                src={diagramContent}
+                                alt="Architecture Diagram"
+                                className="max-w-full h-auto rounded-lg"
+                              />
+                            );
+                          } else {
+                            console.warn('Diagram format not recognized:', {
+                              length: diagramContent.length,
+                              preview: diagramContent.substring(0, 100),
+                              startsWithSVG: isSVG,
+                              startsWithData: isBase64Image
+                            });
+                            return (
+                              <div className="text-gray-500 dark:text-gray-400 p-4">
+                                <p className="mb-2">Diagram format not supported for display.</p>
+                                <details className="text-xs">
+                                  <summary className="cursor-pointer">Debug info</summary>
+                                  <pre className="mt-2 p-2 bg-gray-100 dark:bg-gray-800 rounded overflow-auto">
+                                    {diagramContent.substring(0, 500)}
+                                  </pre>
+                                </details>
+                              </div>
+                            );
+                          }
+                        })()}
                       </div>
                       {/* Architecture Explanation for analyze mode */}
                       {message.context?.result?.architecture_explanation && (
