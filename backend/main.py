@@ -210,34 +210,22 @@ async def analyze_requirements(request: GenerationRequest):
         knowledge_servers = ["aws-knowledge-server"]
         knowledge_agent = MCPKnowledgeAgent("aws-knowledge", knowledge_servers)
         
-        knowledge_prompt = f"""
-        You are an AWS Solution Architect providing comprehensive requirements analysis.
-        
-        User Requirements: {request.requirements}
-        
-        Provide a detailed analysis that:
-        - Breaks down the requirements into functional and non-functional components
-        - Recommends appropriate AWS services with reasoning
-        - Suggests architecture patterns and approaches
-        - Considers scalability, security, and cost implications
-        - Uses up-to-date AWS information from the knowledge base
-        - Provides actionable recommendations
-        
-        Focus on architectural guidance, service selection, and best practices.
-        
-        At the end of your response, suggest 2-3 specific follow-up questions that would help the user:
-        - Clarify requirements
-        - Explore architectural alternatives
-        - Understand implementation details
-        - Consider deployment strategies
-        
-        Format the follow-up questions clearly, like:
-        
-        Follow-up questions you might consider:
-        - [Question 1]
-        - [Question 2] 
-        - [Question 3]
-        """
+        knowledge_prompt = f"""Analyze these AWS requirements:
+
+{request.requirements}
+
+Provide:
+- Requirements breakdown (functional/non-functional)
+- AWS service recommendations with reasoning
+- Architecture patterns and approaches
+- Scalability, security, and cost considerations
+- Use AWS documentation via MCP tools
+
+End with 2-3 follow-up questions formatted as:
+Follow-up questions:
+- [Question 1]
+- [Question 2]
+- [Question 3]"""
         
         agent_inputs = {
             "requirements": request.requirements,
@@ -259,22 +247,20 @@ async def analyze_requirements(request: GenerationRequest):
         diagram_server = ["aws-diagram-server"]
         diagram_agent = MCPKnowledgeAgent("aws-diagram", diagram_server)
         
-        diagram_prompt = f"""
-        Based on the following requirements and analysis, generate an architecture diagram showing the recommended AWS architecture.
-        
-        User Requirements: {request.requirements}
-        
-        Knowledge Analysis Summary:
-        {analysis_content[:2000]}
-        
-        Please create a diagram that visualizes:
-        - All AWS services recommended in the analysis
-        - How the services connect and interact
-        - The data flow between components
-        - The overall architecture pattern
-        
-        Generate the best single architecture solution based on the analysis above.
-        """
+        diagram_prompt = f"""Generate an architecture diagram for these requirements:
+
+Requirements: {request.requirements}
+
+Analysis Summary:
+{analysis_content[:2000]}
+
+Create diagram showing:
+- Recommended AWS services
+- Service connections and interactions
+- Data flow between components
+- Overall architecture pattern
+
+Generate the best single architecture solution."""
         
         diagram_inputs = {
             "requirements": request.requirements,

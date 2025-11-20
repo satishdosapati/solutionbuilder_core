@@ -871,56 +871,25 @@ class EnhancedAnalysisAgent(SimpleStrandsAgent):
         super().__init__(name, mcp_servers)
     
     def _get_system_prompt(self) -> str:
-        return """You are an AWS Solution Architect providing comprehensive requirements analysis.
+        return """You are an AWS Solution Architect analyzing requirements and recommending architectures.
         
-        Your role is to:
-        - Analyze user requirements in detail
-        - Identify functional and non-functional requirements
-        - Recommend AWS services with reasoning and alternatives
-        - Provide cost insights and optimization opportunities
-        - Suggest architecture patterns and approaches
-        - Generate contextual follow-up questions
-        
-        Focus on providing actionable, detailed analysis that helps users make informed decisions."""
+        Provide structured analysis: requirements breakdown, AWS service recommendations, architecture patterns, cost insights, and follow-up questions."""
     
     def _create_prompt(self, inputs: Dict[str, Any]) -> str:
         requirements = inputs.get("requirements", "")
         
-        return f"""Please provide a comprehensive analysis of the following requirements:
+        return f"""Analyze these AWS requirements and provide structured analysis:
 
-User Requirements: {requirements}
+{requirements}
 
-Provide a detailed analysis including:
+Provide:
+1. Requirements Breakdown: Functional, non-functional, implicit, and missing requirements
+2. AWS Service Recommendations: Primary services with confidence scores (0-1), reasoning, alternatives, and dependencies
+3. Architecture Patterns: Recommended patterns (microservices, serverless, etc.) with pros/cons and complexity
+4. Cost Insights: Monthly cost ranges, breakdown by service, optimization opportunities, scaling factors
+5. Follow-up Questions: Technical clarifications, business context, operational considerations
 
-1. **Requirements Breakdown**:
-   - Functional requirements (what the system should do)
-   - Non-functional requirements (performance, scalability, security, cost)
-   - Implicit requirements (things not explicitly stated but needed)
-   - Missing requirements (gaps that should be addressed)
-
-2. **AWS Service Recommendations**:
-   - Primary service recommendations with confidence scores (0-1)
-   - Reasoning for each recommendation
-   - Alternative services and trade-offs
-   - Service relationships and dependencies
-
-3. **Architecture Patterns**:
-   - Recommended architecture patterns (microservices, serverless, etc.)
-   - Alternative approaches with pros/cons
-   - Complexity assessment
-
-4. **Cost Insights**:
-   - Estimated monthly cost ranges
-   - Cost breakdown by service category
-   - Optimization opportunities
-   - Cost scaling factors
-
-5. **Follow-up Questions**:
-   - Technical clarifications needed
-   - Business context questions
-   - Operational considerations
-
-Format your response as structured analysis that can be parsed into JSON."""
+Format as structured JSON-ready analysis."""
     
     async def execute(self, inputs: Dict[str, Any]) -> Dict[str, Any]:
         """Execute the enhanced analysis agent"""
