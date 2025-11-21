@@ -131,31 +131,45 @@ const GenerateOutputDisplay: React.FC<GenerateOutputDisplayProps> = ({ results }
   const downloadDiagram = () => {
     if (!results.architecture_diagram) return;
     
-    const diagramContent = results.architecture_diagram;
+    const diagramContent = results.architecture_diagram.trim();
     let blob: Blob;
     let filename: string;
 
-    if (diagramContent.startsWith('<svg')) {
-      blob = new Blob([diagramContent], { type: 'image/svg+xml' });
+    // Handle SVG format
+    if (diagramContent.startsWith('<svg') || diagramContent.toLowerCase().includes('<svg')) {
+      // Extract SVG if it's embedded in other content
+      const svgMatch = diagramContent.match(/<svg[\s\S]*<\/svg>/i);
+      const svgContent = svgMatch ? svgMatch[0] : diagramContent;
+      blob = new Blob([svgContent], { type: 'image/svg+xml;charset=utf-8' });
       filename = 'architecture-diagram.svg';
-    } else if (diagramContent.startsWith('data:image')) {
+    } 
+    // Handle base64 image data
+    else if (diagramContent.startsWith('data:image')) {
       const base64Match = diagramContent.match(/^data:image\/(\w+);base64,(.+)$/);
       if (base64Match) {
         const type = base64Match[1];
         const base64Data = base64Match[2];
-        const byteCharacters = atob(base64Data);
-        const byteNumbers = new Array(byteCharacters.length);
-        for (let i = 0; i < byteCharacters.length; i++) {
-          byteNumbers[i] = byteCharacters.charCodeAt(i);
+        try {
+          const byteCharacters = atob(base64Data);
+          const byteNumbers = new Array(byteCharacters.length);
+          for (let i = 0; i < byteCharacters.length; i++) {
+            byteNumbers[i] = byteCharacters.charCodeAt(i);
+          }
+          const byteArray = new Uint8Array(byteNumbers);
+          blob = new Blob([byteArray], { type: `image/${type}` });
+          filename = `architecture-diagram.${type}`;
+        } catch (e) {
+          console.error('Failed to decode base64 image:', e);
+          return;
         }
-        const byteArray = new Uint8Array(byteNumbers);
-        blob = new Blob([byteArray], { type: `image/${type}` });
-        filename = `architecture-diagram.${type}`;
       } else {
         return;
       }
-    } else {
-      return;
+    } 
+    // Fallback: save as text/SVG
+    else {
+      blob = new Blob([diagramContent], { type: 'text/plain;charset=utf-8' });
+      filename = 'architecture-diagram.txt';
     }
 
     const url = URL.createObjectURL(blob);
@@ -192,9 +206,19 @@ const GenerateOutputDisplay: React.FC<GenerateOutputDisplayProps> = ({ results }
 
   const cleanTemplate = getCleanTemplate(results.cloudformation_template || '');
   const templateLines = cleanTemplate.split('\n').length;
-  const hasDiagram = results.architecture_diagram && (
-    results.architecture_diagram.startsWith('<svg') || 
-    results.architecture_diagram.startsWith('data:image')
+  
+  // Better diagram detection - check for SVG or image data
+  const hasDiagram = results.architecture_diagram && results.architecture_diagram.trim().length > 0 && (
+    results.architecture_diagram.trim().startsWith('<svg') || 
+    results.architecture_diagram.trim().startsWith('data:image') ||
+    results.architecture_diagram.toLowerCase().includes('<svg') ||
+    results.architecture_diagram.toLowerCase().includes('data:image')
+  );
+  
+  // Check if diagram is SVG format
+  const isSVG = hasDiagram && (
+    results.architecture_diagram.trim().startsWith('<svg') ||
+    results.architecture_diagram.toLowerCase().includes('<svg')
   );
 
   return (
@@ -233,16 +257,22 @@ const GenerateOutputDisplay: React.FC<GenerateOutputDisplayProps> = ({ results }
             </div>
           </div>
 
-          <div className="bg-white dark:bg-slate-700 rounded-lg p-3 border border-gray-200 dark:border-slate-600">
+          <div className={`bg-white dark:bg-slate-700 rounded-lg p-3 border ${hasDiagram ? 'border-purple-300 dark:border-purple-700' : 'border-gray-200 dark:border-slate-600'}`}>
             <div className="flex items-center gap-2">
-              <div className="w-8 h-8 bg-purple-100 dark:bg-purple-900 rounded-lg flex items-center justify-center">
-                <svg className="w-5 h-5 text-purple-600 dark:text-purple-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 5a1 1 0 011-1h4a1 1 0 011 1v7a1 1 0 01-1 1H5a1 1 0 01-1-1V5zM14 5a1 1 0 011-1h4a1 1 0 011 1v7a1 1 0 01-1 1h-4a1 1 0 01-1-1V5zM4 16a1 1 0 011-1h4a1 1 0 011 1v3a1 1 0 01-1 1H5a1 1 0 01-1-1v-3zM14 16a1 1 0 011-1h4a1 1 0 011 1v3a1 1 0 01-1 1h-4a1 1 0 01-1-1v-3z" />
-                </svg>
+              <div className={`w-8 h-8 rounded-lg flex items-center justify-center ${hasDiagram ? 'bg-purple-100 dark:bg-purple-900' : 'bg-gray-100 dark:bg-gray-700'}`}>
+                {hasDiagram ? (
+                  <svg className="w-5 h-5 text-purple-600 dark:text-purple-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 5a1 1 0 011-1h4a1 1 0 011 1v7a1 1 0 01-1 1H5a1 1 0 01-1-1V5zM14 5a1 1 0 011-1h4a1 1 0 011 1v7a1 1 0 01-1 1h-4a1 1 0 01-1-1V5zM4 16a1 1 0 011-1h4a1 1 0 011 1v3a1 1 0 01-1 1H5a1 1 0 01-1-1v-3zM14 16a1 1 0 011-1h4a1 1 0 011 1v3a1 1 0 01-1 1h-4a1 1 0 01-1-1v-3z" />
+                  </svg>
+                ) : (
+                  <svg className="w-5 h-5 text-gray-400 dark:text-gray-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M18.364 18.364A9 9 0 005.636 5.636m12.728 12.728A9 9 0 015.636 5.636m12.728 12.728L5.636 5.636" />
+                  </svg>
+                )}
               </div>
               <div>
                 <p className="text-xs text-gray-500 dark:text-gray-400">Diagram</p>
-                <p className="text-sm font-semibold text-gray-900 dark:text-white">
+                <p className={`text-sm font-semibold ${hasDiagram ? 'text-purple-700 dark:text-purple-300' : 'text-gray-900 dark:text-white'}`}>
                   {hasDiagram ? 'Ready' : 'N/A'}
                 </p>
               </div>
@@ -433,17 +463,25 @@ const GenerateOutputDisplay: React.FC<GenerateOutputDisplayProps> = ({ results }
                 <div className="flex gap-2">
                   <div className="flex items-center gap-1 bg-gray-100 dark:bg-slate-700 rounded-lg px-2 py-1">
                     <button
-                      onClick={() => setDiagramZoom(Math.max(50, diagramZoom - 25))}
-                      className="text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white"
+                      onClick={() => setDiagramZoom(Math.max(25, diagramZoom - 25))}
+                      className="text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white p-1 rounded hover:bg-gray-200 dark:hover:bg-slate-600 transition-colors"
+                      title="Zoom out"
                     >
                       <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0zM13 10H7" />
                       </svg>
                     </button>
-                    <span className="text-xs text-gray-600 dark:text-gray-400 px-2">{diagramZoom}%</span>
                     <button
-                      onClick={() => setDiagramZoom(Math.min(200, diagramZoom + 25))}
-                      className="text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white"
+                      onClick={() => setDiagramZoom(100)}
+                      className="text-xs text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white px-2 py-1 rounded hover:bg-gray-200 dark:hover:bg-slate-600 transition-colors font-medium"
+                      title="Reset zoom"
+                    >
+                      {diagramZoom}%
+                    </button>
+                    <button
+                      onClick={() => setDiagramZoom(Math.min(300, diagramZoom + 25))}
+                      className="text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white p-1 rounded hover:bg-gray-200 dark:hover:bg-slate-600 transition-colors"
+                      title="Zoom in"
                     >
                       <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0zM10 7v6m3-3H7" />
@@ -465,27 +503,64 @@ const GenerateOutputDisplay: React.FC<GenerateOutputDisplayProps> = ({ results }
 
             {/* Diagram Display */}
             <div className="bg-white dark:bg-slate-800 rounded-xl border border-gray-200 dark:border-slate-700 shadow-lg overflow-hidden">
-              <div className="p-8 min-h-[500px] flex items-center justify-center bg-gradient-to-br from-gray-50 to-gray-100 dark:from-slate-900 dark:to-slate-800">
+              <div className="relative min-h-[500px] max-h-[calc(100vh-300px)] overflow-auto bg-gradient-to-br from-gray-50 to-gray-100 dark:from-slate-900 dark:to-slate-800 p-8">
                 {hasDiagram ? (
-                  <div 
-                    className="max-w-full max-h-full overflow-auto"
-                    style={{ transform: `scale(${diagramZoom / 100})`, transformOrigin: 'center' }}
-                  >
-                    {results.architecture_diagram.startsWith('<svg') ? (
-                      <div 
-                        className="max-w-full"
-                        dangerouslySetInnerHTML={{ __html: results.architecture_diagram }}
-                      />
-                    ) : (
-                      <img
-                        src={results.architecture_diagram}
-                        alt="Architecture Diagram"
-                        className="max-w-full h-auto mx-auto shadow-xl"
-                      />
-                    )}
+                  <div className="flex items-center justify-center w-full h-full">
+                    <div 
+                      className="relative"
+                      style={{ 
+                        transform: `scale(${diagramZoom / 100})`, 
+                        transformOrigin: 'center',
+                        transition: 'transform 0.2s ease-in-out'
+                      }}
+                    >
+                      {isSVG ? (
+                        <div 
+                          className="max-w-full"
+                          style={{
+                            width: '100%',
+                            height: 'auto',
+                            display: 'flex',
+                            justifyContent: 'center',
+                            alignItems: 'center'
+                          }}
+                          dangerouslySetInnerHTML={{ 
+                            __html: results.architecture_diagram.includes('<svg') 
+                              ? results.architecture_diagram 
+                              : results.architecture_diagram.replace(/.*?(<svg[\s\S]*<\/svg>).*/i, '$1')
+                          }}
+                        />
+                      ) : results.architecture_diagram.startsWith('data:image') ? (
+                        <img
+                          src={results.architecture_diagram}
+                          alt="Architecture Diagram"
+                          className="max-w-full h-auto mx-auto shadow-xl rounded-lg"
+                          style={{
+                            maxHeight: '80vh',
+                            objectFit: 'contain'
+                          }}
+                          onError={(e) => {
+                            console.error('Failed to load diagram image');
+                            e.currentTarget.style.display = 'none';
+                          }}
+                        />
+                      ) : (
+                        <div className="text-center p-8">
+                          <p className="text-sm text-gray-500 dark:text-gray-400 mb-4">
+                            Diagram format detected but unable to render. Try downloading the file.
+                          </p>
+                          <button
+                            onClick={downloadDiagram}
+                            className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors text-sm"
+                          >
+                            Download Diagram
+                          </button>
+                        </div>
+                      )}
+                    </div>
                   </div>
                 ) : (
-                  <div className="text-center">
+                  <div className="flex flex-col items-center justify-center h-full min-h-[400px] text-center">
                     <div className="w-20 h-20 bg-gray-200 dark:bg-slate-700 rounded-full flex items-center justify-center mx-auto mb-4">
                       <svg className="w-10 h-10 text-gray-400 dark:text-gray-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 5a1 1 0 011-1h4a1 1 0 011 1v7a1 1 0 01-1 1H5a1 1 0 01-1-1V5zM14 5a1 1 0 011-1h4a1 1 0 011 1v7a1 1 0 01-1 1h-4a1 1 0 01-1-1V5zM4 16a1 1 0 011-1h4a1 1 0 011 1v3a1 1 0 01-1 1H5a1 1 0 01-1-1v-3zM14 16a1 1 0 011-1h4a1 1 0 011 1v3a1 1 0 01-1 1h-4a1 1 0 01-1-1v-3z" />
@@ -493,8 +568,18 @@ const GenerateOutputDisplay: React.FC<GenerateOutputDisplayProps> = ({ results }
                     </div>
                     <h4 className="text-lg font-semibold text-gray-900 dark:text-white mb-2">Diagram Not Available</h4>
                     <p className="text-sm text-gray-500 dark:text-gray-400 max-w-md">
-                      The architecture diagram could not be rendered in this format. You can download the raw content if available.
+                      {results.architecture_diagram 
+                        ? 'The architecture diagram format is not supported for display. You can download the raw content.'
+                        : 'No architecture diagram was generated for this architecture.'}
                     </p>
+                    {results.architecture_diagram && (
+                      <button
+                        onClick={downloadDiagram}
+                        className="mt-4 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors text-sm"
+                      >
+                        Download Raw Content
+                      </button>
+                    )}
                   </div>
                 )}
               </div>
