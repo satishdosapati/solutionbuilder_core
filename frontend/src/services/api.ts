@@ -297,6 +297,9 @@ export const apiService = {
         },
         body: JSON.stringify({
           requirements: request.requirements,
+          existing_cloudformation_template: request.existing_cloudformation_template,
+          existing_diagram: request.existing_diagram,
+          existing_cost_estimate: request.existing_cost_estimate
         })
       });
 
@@ -358,6 +361,8 @@ export const apiService = {
                 } else if (data.type === 'cost_complete' && data.cost_estimate) {
                   costEstimate = data.cost_estimate;
                   onChunk({ type: 'cost_complete', cost_estimate: data.cost_estimate });
+                } else if (data.type === 'follow_up_suggestions' && data.suggestions) {
+                  onChunk({ type: 'follow_up_suggestions', suggestions: data.suggestions });
                 } else if (data.type === 'done') {
                   console.log('Streaming generate done signal received');
                   finalResult = {

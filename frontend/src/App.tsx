@@ -582,6 +582,30 @@ function App() {
         // Generate mode - use streaming
         console.log('Starting generate mode with message:', message);
         
+        // Check if this is a follow-up request for missing artifacts (diagram or cost)
+        const hasExistingArchitecture = conversationState.context.currentArchitecture;
+        const isFollowUpForMissingArtifact = hasExistingArchitecture && 
+          (message.toLowerCase().includes('diagram') || 
+           message.toLowerCase().includes('cost') || 
+           message.toLowerCase().includes('pricing') ||
+           message.toLowerCase().includes('show me') ||
+           message.toLowerCase().includes('what\'s the'));
+        
+        // Prepare request with existing context if available
+        const generateRequest: any = { requirements: message };
+        if (isFollowUpForMissingArtifact && hasExistingArchitecture) {
+          console.log('Follow-up request detected, using existing architecture context');
+          if (hasExistingArchitecture.cloudformation) {
+            generateRequest.existing_cloudformation_template = hasExistingArchitecture.cloudformation;
+          }
+          if (hasExistingArchitecture.diagram) {
+            generateRequest.existing_diagram = hasExistingArchitecture.diagram;
+          }
+          if (hasExistingArchitecture.cost) {
+            generateRequest.existing_cost_estimate = hasExistingArchitecture.cost;
+          }
+        }
+        
         // Add assistant message placeholder first
         addMessage({
           type: 'assistant',
@@ -597,11 +621,12 @@ function App() {
           let diagramContent = '';
           let costEstimate: any = null;
           let streamingResult: any = null;
+          let followUpSuggestions: string[] = [];
           let currentStatus = 'Generating your architecture...';
           
           try {
             streamingResult = await apiService.generateArchitectureStream(
-              { requirements: message },
+              generateRequest,
               (chunk: any) => {
                 console.log('Received generate chunk:', chunk.type);
                 
@@ -669,10 +694,27 @@ function App() {
                     const updatedMessages = [...prev.messages];
                     const lastMessage = updatedMessages[updatedMessages.length - 1];
                     if (lastMessage && lastMessage.type === 'assistant') {
-                      lastMessage.content = `I've generated your architecture with the following components:\n\n✅ CloudFormation template created\n✅ Architecture diagram generated\n✅ Cost estimate: ${costEstimate?.monthly_cost || '$500-1000'}`;
+                      const hasDiagram = diagramContent && diagramContent.trim();
+                      const hasCost = costEstimate?.monthly_cost;
+                      let content = '✅ CloudFormation template created';
+                      if (hasDiagram) content += '\n✅ Architecture diagram generated';
+                      if (hasCost) content += `\n✅ Cost estimate: ${costEstimate.monthly_cost}`;
+                      lastMessage.content = `I've generated your architecture:\n\n${content}`;
                       if (!lastMessage.context) lastMessage.context = {};
                       if (!lastMessage.context.result) lastMessage.context.result = {};
                       lastMessage.context.result.cost_estimate = costEstimate;
+                    }
+                    return { ...prev, messages: updatedMessages };
+                  });
+                } else if (chunk.type === 'follow_up_suggestions' && chunk.suggestions) {
+                  followUpSuggestions = chunk.suggestions;
+                  setConversationState(prev => {
+                    const updatedMessages = [...prev.messages];
+                    const lastMessage = updatedMessages[updatedMessages.length - 1];
+                    if (lastMessage && lastMessage.type === 'assistant') {
+                      if (!lastMessage.context) lastMessage.context = {};
+                      if (!lastMessage.context.result) lastMessage.context.result = {};
+                      lastMessage.context.result.follow_up_suggestions = followUpSuggestions;
                     }
                     return { ...prev, messages: updatedMessages };
                   });
@@ -684,17 +726,28 @@ function App() {
             );
             
             // Update final message with complete results and context
-            const responseContent = `I've generated your architecture with the following components:\n\n✅ CloudFormation template created\n✅ Architecture diagram generated\n✅ Cost estimate: ${streamingResult.cost_estimate?.monthly_cost || costEstimate?.monthly_cost || '$500-1000'}`;
+            const hasDiagram = (streamingResult?.architecture_diagram || diagramContent) && (streamingResult?.architecture_diagram || diagramContent).trim();
+            const hasCost = streamingResult?.cost_estimate?.monthly_cost || costEstimate?.monthly_cost;
+            let responseContent = '✅ CloudFormation template created';
+            if (hasDiagram) responseContent += '\n✅ Architecture diagram generated';
+            if (hasCost) responseContent += `\n✅ Cost estimate: ${streamingResult?.cost_estimate?.monthly_cost || costEstimate?.monthly_cost}`;
             
             setConversationState(prev => {
               const updatedMessages = [...prev.messages];
               const lastMessage = updatedMessages[updatedMessages.length - 1];
               if (lastMessage && lastMessage.type === 'assistant') {
-                lastMessage.content = responseContent;
+                lastMessage.content = `I've generated your architecture:\n\n${responseContent}`;
+                const finalResult = {
+                  ...streamingResult,
+                  cloudformation_template: streamingResult?.cloudformation_template || cloudformationContent,
+                  architecture_diagram: streamingResult?.architecture_diagram || diagramContent,
+                  cost_estimate: streamingResult?.cost_estimate || costEstimate,
+                  follow_up_suggestions: streamingResult?.follow_up_suggestions || followUpSuggestions
+                };
                 lastMessage.context = {
-                  result: streamingResult,
-                  suggestions: generateSuggestions(streamingResult, currentMode),
-                  actions: generateActionButtons(streamingResult, currentMode),
+                  result: finalResult,
+                  suggestions: generateSuggestions(finalResult, currentMode),
+                  actions: generateActionButtons(finalResult, currentMode),
                   follow_up_questions: []
                 };
               }
@@ -723,20 +776,25 @@ function App() {
           } catch (streamingError) {
             console.warn('Generate streaming failed, falling back to regular API:', streamingError);
             // Fallback to regular API call
-            const result = await apiService.generateArchitecture({ requirements: message });
+            const result = await apiService.generateArchitecture(generateRequest);
             
-            const responseContent = `I've generated your architecture with the following components:\n\n✅ CloudFormation template created\n✅ Architecture diagram generated\n✅ Cost estimate: ${result.cost_estimate?.monthly_cost || '$500-1000'}`;
+            const hasDiagram = result.architecture_diagram && result.architecture_diagram.trim();
+            const hasCost = result.cost_estimate?.monthly_cost;
+            let responseContent = '✅ CloudFormation template created';
+            if (hasDiagram) responseContent += '\n✅ Architecture diagram generated';
+            if (hasCost) responseContent += `\n✅ Cost estimate: ${result.cost_estimate.monthly_cost}`;
             
             setConversationState(prev => {
               const updatedMessages = [...prev.messages];
               const lastMessage = updatedMessages[updatedMessages.length - 1];
               if (lastMessage && lastMessage.type === 'assistant') {
-                lastMessage.content = responseContent;
+                lastMessage.content = `I've generated your architecture:\n\n${responseContent}`;
                 lastMessage.context = {
                   result: {
                     cloudformation_template: result.cloudformation_template,
                     architecture_diagram: result.architecture_diagram,
-                    cost_estimate: result.cost_estimate
+                    cost_estimate: result.cost_estimate,
+                    follow_up_suggestions: result.follow_up_suggestions || []
                   },
                   suggestions: generateSuggestions(result, currentMode),
                   actions: generateActionButtons(result, currentMode),

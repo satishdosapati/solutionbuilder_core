@@ -1,5 +1,8 @@
 export interface GenerationRequest {
   requirements: string;
+  existing_cloudformation_template?: string;  // Existing CF template to use as context
+  existing_diagram?: string;  // Existing diagram to use as context
+  existing_cost_estimate?: CostEstimate;  // Existing cost estimate to use as context
 }
 
 export interface CostDriver {
@@ -23,6 +26,7 @@ export interface GenerationResponse {
   cost_estimate: CostEstimate;
   mcp_servers_enabled: string[];
   analysis_summary?: any; // Add analysis summary
+  follow_up_suggestions?: string[]; // Follow-up suggestions based on what wasn't generated
 }
 
 // Enhanced analysis types

@@ -30,7 +30,7 @@ cd ..
 
 echo "Development servers started!"
 echo "Backend: http://localhost:8000"
-echo "Frontend: http://localhost:3000"
+echo "Frontend: http://localhost:5000"
 echo ""
 echo "Press Ctrl+C to stop all servers"
 

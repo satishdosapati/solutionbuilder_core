@@ -9,15 +9,23 @@ import asyncio
 import json
 import os
 import re
+import logging
+
+logger = logging.getLogger(__name__)
+
+try:
+    import yaml
+    YAML_AVAILABLE = True
+except ImportError:
+    YAML_AVAILABLE = False
+    logger.warning("PyYAML not available, CloudFormation parsing will use regex fallback")
+
 from strands import Agent
 from strands.models import BedrockModel, Model
 from strands.agent.conversation_manager import SlidingWindowConversationManager
 from strands.tools.mcp import MCPClient
 from mcp import stdio_client, StdioServerParameters
 from services.mcp_client_manager import mcp_client_manager
-import logging
-
-logger = logging.getLogger(__name__)
 
 class SimpleStrandsAgent:
     """Simplified Strands agent for AWS Solution Architect tasks"""
@@ -124,12 +132,10 @@ class CloudFormationAgent(SimpleStrandsAgent):
         security best practices, and cost optimization considerations."""
     
     def _create_prompt(self, inputs: Dict[str, Any]) -> str:
-        roles = inputs.get("roles", [])
         requirements = inputs.get("requirements", "")
         
         return f"""
-        Generate a comprehensive CloudFormation template for the following AWS Solution Architect roles:
-        {', '.join(roles)}
+        Generate a comprehensive CloudFormation template for the following requirements:
         
         Requirements: {requirements}
         
@@ -138,71 +144,499 @@ class CloudFormationAgent(SimpleStrandsAgent):
         """
 
 class ArchitectureDiagramAgent(SimpleStrandsAgent):
-    """Agent for generating architecture diagrams using AWS Diagram MCP Server"""
+    """Agent for generating architecture diagrams using AWS Diagram MCP Server following a structured 5-step process"""
+    
+    async def initialize(self):
+        """Initialize the agent with basic configuration (MCP tools will be added during execution)"""
+        try:
+            # Get model provider
+            model = None
+            if os.getenv('AWS_REGION') or os.getenv('AWS_DEFAULT_REGION'):
+                try:
+                    model_id = os.getenv('BEDROCK_MODEL_ID', "anthropic.claude-3-5-sonnet-20240620-v1:0")
+                    model = BedrockModel(model_id=model_id)
+                except Exception as e:
+                    logger.warning(f"Failed to initialize Bedrock model: {e}")
+            
+            if not model:
+                raise Exception("No valid model provider available. Please configure AWS credentials.")
+            
+            # Configure conversation management
+            conversation_manager = SlidingWindowConversationManager(window_size=10)
+            
+            # Create the agent (tools will be added during execution when MCP client is active)
+            self.agent = Agent(
+                name=self.name,
+                model=model,
+                system_prompt=self._get_system_prompt(),
+                conversation_manager=conversation_manager
+            )
+            
+            logger.info(f"ArchitectureDiagramAgent initialized successfully")
+            
+        except Exception as e:
+            logger.error(f"Failed to initialize ArchitectureDiagramAgent: {e}")
+            raise
     
     def _get_system_prompt(self) -> str:
         return """You are an expert AWS Solution Architect specializing in creating detailed architecture diagrams.
-        Generate comprehensive AWS infrastructure architectures based on project requirements.
-        Create production-ready diagrams showing real AWS services, data flow, security, and scalability.
-        Focus on architectural solutions that fulfill specific project needs, not role descriptions."""
+        You follow a structured 5-step process to generate diagrams:
+        
+        STEP 1: Interpret Requirements
+        - Analyze the project requirements thoroughly
+        - Identify key functional and non-functional requirements
+        - Extract AWS services needed based on requirements
+        
+        STEP 2: Check AWS Documentation for Best Practices
+        - Use AWS Knowledge MCP Server tools (awsdocs_search_documentation) to search for:
+          * Architecture patterns matching the requirements
+          * AWS service best practices
+          * Security and compliance recommendations
+          * Scalability and high availability patterns
+        - Review relevant AWS documentation to ensure the architecture follows AWS best practices
+        
+        STEP 3: Generate Python Code Using the Diagrams Package
+        - Based on requirements and AWS best practices, design the architecture
+        - Call 'get_diagram_examples' tool FIRST to see the exact format and examples
+        - Review examples carefully to understand code structure (note: examples show code WITHOUT imports)
+        - Generate Python code using the diagrams package that creates:
+          * Complete AWS infrastructure architecture
+          * All necessary AWS services for the project
+          * Data flow and service relationships using >> operator
+          * Security boundaries and network architecture
+          * High availability and scalability considerations
+        
+        STEP 4: Execute the Code to Create the Diagram
+        - Call 'generate_diagram' tool with the Python code as a STRING parameter named 'code'
+        - DO NOT include import statements (diagrams library is pre-imported)
+        - DO NOT include markdown formatting, comments, or explanations in the code parameter
+        - DO NOT wrap the code in code blocks (```python ... ```)
+        - Pass ONLY the raw Python code as a plain string
+        - Use show=False in Diagram() constructor
+        - The tool will execute the code and generate a PNG image
+        - The tool response may contain:
+          * Base64 PNG image data (data:image/png;base64,...)
+          * File path to the saved diagram (e.g., generated-diagrams/diagram.png)
+          * Error message if generation failed
+        
+        STEP 5: Return the Diagram as an Image
+        - Check the generate_diagram tool result for:
+          1. Base64 image data: data:image/png;base64,<base64_data>
+          2. File path: If a file path is returned, read the file and convert to base64
+          3. Error message: If an error is returned, report it clearly
+        - Extract and return the image data exactly as provided: data:image/png;base64,<base64_data>
+        - DO NOT modify or re-encode the image data
+        - Provide a brief explanation of the architecture shown in the diagram AFTER returning the image
+        
+        CRITICAL REQUIREMENTS:
+        - ALWAYS call get_diagram_examples FIRST before generating code
+        - DO NOT include import statements in the code passed to generate_diagram
+        - DO NOT wrap code in markdown code blocks when calling generate_diagram
+        - Pass the code parameter as a plain string, not formatted text
+        - Match the exact format shown in the examples
+        - The generate_diagram tool returns PNG image data in base64 format
+        - Extract the image data directly from the tool result without modification
+        - Focus on production-ready architectures that fulfill project requirements"""
     
     def _create_prompt(self, inputs: Dict[str, Any]) -> str:
-        roles = inputs.get("roles", [])
         requirements = inputs.get("requirements", "")
+        cloudformation_summary = inputs.get("cloudformation_summary", "")
+        aws_services = inputs.get("aws_services", [])
         
-        return f"""
-        Create a comprehensive AWS architecture diagram for the following project requirements:
+        prompt = f"""Follow the 5-step process to generate an AWS architecture diagram:
+
+STEP 1: Interpret Requirements
+Requirements: {requirements}
+"""
         
-        Requirements: {requirements}
+        if cloudformation_summary:
+            prompt += f"""
+CloudFormation Summary (for context):
+{cloudformation_summary}
+"""
         
-        Apply expertise from these AWS Solution Architect roles: {', '.join(roles)}
+        if aws_services:
+            prompt += f"""
+AWS Services Identified: {', '.join(aws_services)}
+"""
         
-        Generate Python code using the diagrams package that creates:
-        1. Complete AWS infrastructure architecture
-        2. All necessary AWS services for the project
-        3. Data flow and service relationships
-        4. Security boundaries and network architecture
-        5. High availability and scalability considerations
+        prompt += """
+STEP 2: Check AWS Documentation for Best Practices
+- Use awsdocs_search_documentation tool to search for architecture patterns and best practices
+- Search for relevant AWS services and their recommended usage patterns
+- Review security, scalability, and high availability best practices
+
+STEP 3: Generate Python Code Using the Diagrams Package
+- Call get_diagram_examples tool FIRST to see the exact format
+- Review the examples to understand the code structure (no imports needed)
+- Generate Python code that creates a comprehensive architecture diagram showing:
+  * All AWS services needed for the requirements
+  * Service connections and data flow
+  * Network architecture (VPC, subnets, etc.)
+  * Security boundaries
+  * High availability and scalability features
+
+STEP 4: Execute the Code to Create the Diagram
+- Call generate_diagram tool with ONLY the Python code (no imports, no markdown, no comments)
+- Use the exact format from the examples
+
+STEP 5: Return the Diagram as an Image
+- Extract the PNG image data from the generate_diagram response
+- Return it as: data:image/png;base64,<base64_data>
+- Provide a brief explanation of the architecture
+
+Begin with STEP 1: Interpret the requirements above, then proceed through all 5 steps."""
         
-        Focus on creating a production-ready architecture that fulfills the project requirements.
-        Show real AWS services like VPC, subnets, load balancers, databases, compute instances, etc.
-        """
+        return prompt
     
     async def execute(self, inputs: Dict[str, Any]) -> Dict[str, Any]:
         if not self.agent:
             await self.initialize()
         
         try:
-            # Create a prompt for diagram generation
+            # Collect tools from all MCP servers and keep clients alive during execution
+            all_tools = []
+            client_wrappers = []
+            
+            # Get client wrappers from each server (keep them alive)
+            for server_name in self.mcp_servers:
+                try:
+                    server_wrapper = await mcp_client_manager.get_mcp_client_wrapper([server_name])
+                    client_wrappers.append(server_wrapper)
+                    # Enter context to get client and tools
+                    server_client = await server_wrapper.__aenter__()
+                    server_tools = server_client.list_tools_sync()
+                    all_tools.extend(server_tools)
+                    logger.info(f"ArchitectureDiagramAgent: Got {len(server_tools)} tools from {server_name}")
+                except Exception as e:
+                    logger.warning(f"Failed to get tools from {server_name}: {e}")
+                    continue
+            
+            logger.info(f"ArchitectureDiagramAgent: Total {len(all_tools)} MCP tools for diagram generation")
+            
+            # Log available tool names for debugging
+            tool_names = []
+            for tool in all_tools:
+                if hasattr(tool, 'tool_name'):
+                    tool_names.append(tool.tool_name)
+                else:
+                    tool_names.append(tool.__class__.__name__)
+            logger.info(f"Available tools: {tool_names}")
+            
+            # Check if diagram tools are available
+            has_diagram_examples = any('get_diagram_examples' in str(name).lower() for name in tool_names)
+            has_generate_diagram = any('generate_diagram' in str(name).lower() for name in tool_names)
+            
+            if not has_diagram_examples or not has_generate_diagram:
+                logger.warning(f"Diagram tools missing! get_diagram_examples: {has_diagram_examples}, generate_diagram: {has_generate_diagram}")
+                logger.warning(f"Available tools: {tool_names}")
+            
+            # Create agent with combined tools
+            if all_tools:
+                execution_agent = Agent(
+                    name=self.agent.name if hasattr(self.agent, 'name') else self.name,
+                    model=self.agent.model if hasattr(self.agent, 'model') else None,
+                    tools=all_tools,
+                    system_prompt=self._get_system_prompt(),
+                    conversation_manager=self.agent.conversation_manager if hasattr(self.agent, 'conversation_manager') else None
+                )
+            else:
+                execution_agent = self.agent
+            
+            # Create a prompt for diagram generation following the 5-step process
             prompt = self._create_prompt(inputs)
             
-            # Execute the agent
-            response = await self.agent.invoke_async(prompt)
+            # Execute the agent (it will follow the 5-step process using MCP tools)
+            # Keep all clients alive during execution
+            try:
+                response = await execution_agent.invoke_async(prompt)
+                # Log full response structure for debugging
+                logger.debug(f"Response type: {type(response)}")
+                if hasattr(response, '__dict__'):
+                    logger.debug(f"Response attributes: {list(response.__dict__.keys())}")
+            finally:
+                # Release all client wrappers
+                for wrapper in client_wrappers:
+                    try:
+                        await wrapper.__aexit__(None, None, None)
+                    except Exception as e:
+                        logger.debug(f"Error releasing MCP client: {e}")
             
-            # Extract content from the response message
+            # Extract content from the response message, including tool results
             content = ""
+            tool_results_content = []  # Collect tool result content separately
+            tool_calls_info = []  # Track tool calls for debugging
+            
             if hasattr(response, 'message') and isinstance(response.message, dict):
                 if 'content' in response.message and isinstance(response.message['content'], list):
-                    # Extract text from content blocks
+                    # Extract text from content blocks AND tool results
                     content_parts = []
-                    for block in response.message['content']:
-                        if isinstance(block, dict) and 'text' in block:
-                            content_parts.append(block['text'])
+                    logger.debug(f"Processing {len(response.message['content'])} content blocks")
+                    for idx, block in enumerate(response.message['content']):
+                        if isinstance(block, dict):
+                            block_type = block.get('type', 'unknown')
+                            logger.debug(f"Block {idx}: type={block_type}, keys={list(block.keys())}")
+                            
+                            # Check for tool use blocks (tool calls)
+                            if block_type == 'tool_use':
+                                tool_name = block.get('name', 'unknown')
+                                tool_calls_info.append(f"Tool call: {tool_name}")
+                                logger.info(f"Found tool call: {tool_name} (id: {block.get('id', 'N/A')})")
+                            
+                            # Check for tool result blocks (where generate_diagram response would be)
+                            if block_type == 'tool_result' or 'tool_use_id' in block:
+                                tool_use_id = block.get('tool_use_id', 'unknown')
+                                is_error = block.get('is_error', False)
+                                tool_calls_info.append(f"Tool result for {tool_use_id}, is_error: {is_error}")
+                                
+                                # Log full block structure for debugging
+                                logger.debug(f"Tool result block structure: {json.dumps(block, indent=2, default=str)[:500]}")
+                                
+                                if is_error:
+                                    error_text = block.get('content') or block.get('text') or str(block)
+                                    logger.error(f"Tool result error for {tool_use_id}: {error_text}")
+                                    # Check if this is a generate_diagram error
+                                    if 'generate_diagram' in str(block).lower() or tool_use_id and 'generate' in str(tool_use_id).lower():
+                                        logger.error(f"generate_diagram tool returned an error: {error_text}")
+                                    tool_results_content.append(f"ERROR: {error_text}")
+                                    content_parts.append(f"ERROR: {error_text}")
+                                else:
+                                    # Tool result - extract content (could contain image data)
+                                    tool_content = block.get('content') or block.get('text') or ''
+                                    
+                                    # Handle different content formats
+                                    if isinstance(tool_content, str):
+                                        logger.debug(f"Tool result content (string): {len(tool_content)} chars")
+                                        tool_results_content.append(tool_content)
+                                        content_parts.append(tool_content)
+                                    elif isinstance(tool_content, list):
+                                        logger.debug(f"Tool result content (list): {len(tool_content)} items")
+                                        # Handle nested content blocks in tool results
+                                        for sub_idx, sub_block in enumerate(tool_content):
+                                            if isinstance(sub_block, dict):
+                                                sub_type = sub_block.get('type', 'unknown')
+                                                logger.debug(f"  Sub-block {sub_idx}: type={sub_type}, keys={list(sub_block.keys())}")
+                                                
+                                                if 'text' in sub_block:
+                                                    text_content = sub_block['text']
+                                                    logger.debug(f"  Found text content: {len(text_content)} chars")
+                                                    tool_results_content.append(text_content)
+                                                    content_parts.append(text_content)
+                                                elif sub_type == 'image':
+                                                    # Handle image blocks directly
+                                                    image_source = sub_block.get('source', {})
+                                                    image_url = image_source.get('data', '') or image_source.get('url', '')
+                                                    if image_url:
+                                                        logger.info(f"  Found image data in sub-block: {len(image_url)} chars")
+                                                        tool_results_content.append(image_url)
+                                                        content_parts.append(image_url)
+                                                else:
+                                                    # Try to extract any string content
+                                                    for key in ['content', 'data', 'value']:
+                                                        if key in sub_block:
+                                                            value = sub_block[key]
+                                                            if isinstance(value, str):
+                                                                logger.debug(f"  Found {key} content: {len(value)} chars")
+                                                                tool_results_content.append(value)
+                                                                content_parts.append(value)
+                                                            break
+                                    elif tool_content:
+                                        # Fallback: convert to string
+                                        logger.debug(f"Tool result content (other): {type(tool_content)}")
+                                        tool_results_content.append(str(tool_content))
+                                        content_parts.append(str(tool_content))
+                            elif 'text' in block:
+                                content_parts.append(block['text'])
                     content = '\n'.join(content_parts)
                 else:
                     content = str(response.message)
             else:
                 content = str(response)
             
-            # Generate the actual diagram using the diagrams package
-            diagram_code = self._extract_diagram_code(content)
-            diagram_svg = self._generate_diagram_svg(diagram_code, inputs)
+            # Log tool calls for debugging
+            if tool_calls_info:
+                logger.info(f"Tool calls detected: {', '.join(tool_calls_info)}")
+            
+            # Log tool results for debugging
+            if tool_results_content:
+                logger.info(f"Found {len(tool_results_content)} tool result blocks")
+                for i, tool_result in enumerate(tool_results_content):
+                    logger.info(f"Tool result {i}: {len(tool_result)} chars")
+                    logger.debug(f"Tool result {i} preview: {tool_result[:200]}")
+                    # Check if it contains error messages
+                    if 'error' in tool_result.lower() or 'failed' in tool_result.lower():
+                        logger.warning(f"Tool result {i} appears to contain an error: {tool_result[:500]}")
+            else:
+                logger.warning("No tool result blocks found in response!")
+            
+            # Log full response structure if no tool results found
+            if not tool_results_content and hasattr(response, 'message'):
+                logger.info(f"Full response.message structure: {json.dumps(response.message, indent=2, default=str)[:1000]}")
+            
+            # Extract PNG image data from generate_diagram tool response (STEP 5)
+            # Based on AWS blog: https://aws.amazon.com/blogs/machine-learning/build-aws-architecture-diagrams-using-amazon-q-cli-and-mcp/
+            # The generate_diagram tool may return:
+            # 1. Base64 PNG image data (data:image/png;base64,...)
+            # 2. File path to saved diagram (default: generated-diagrams directory)
+            # 3. Error message if generation failed
+            diagram_image = None
+            architecture_explanation = ""
+            
+            # Check tool results first (where generate_diagram response should be)
+            for tool_result in tool_results_content:
+                if isinstance(tool_result, str):
+                    # Priority 1a: Check for base64 PNG image data
+                    base64_png_match = re.search(r'data:image/png;base64,([A-Za-z0-9+/=]+)', tool_result, re.IGNORECASE)
+                    if base64_png_match:
+                        base64_data = base64_png_match.group(1)
+                        diagram_image = f"data:image/png;base64,{base64_data}"
+                        logger.info(f"Extracted PNG image from tool result block ({len(diagram_image)} chars)")
+                        break
+                    
+                    # Priority 1b: Check for file path (diagrams are saved to generated-diagrams by default)
+                    # Look for paths like: generated-diagrams/diagram.png, ./generated-diagrams/..., etc.
+                    file_path_patterns = [
+                        r'(?:generated-diagrams|\./generated-diagrams)[/\\][^\s"\'<>]+\.(png|svg)',
+                        r'[^\s"\'<>]*diagram[^\s"\'<>]*\.(png|svg)',
+                        r'/[^\s"\'<>]+\.(png|svg)',
+                        r'[A-Za-z]:[\\/][^\s"\'<>]+\.(png|svg)'  # Windows paths
+                    ]
+                    
+                    for pattern in file_path_patterns:
+                        file_match = re.search(pattern, tool_result, re.IGNORECASE)
+                        if file_match:
+                            file_path = file_match.group(0)
+                            logger.info(f"Found file path in tool result: {file_path}")
+                            # Try to read the file and convert to base64
+                            try:
+                                import os
+                                import base64
+                                # Clean up the path (remove quotes, etc.)
+                                file_path = file_path.strip('"\'<>')
+                                # Check if file exists
+                                if os.path.exists(file_path):
+                                    with open(file_path, 'rb') as f:
+                                        image_data = f.read()
+                                        base64_data = base64.b64encode(image_data).decode('utf-8')
+                                        diagram_image = f"data:image/png;base64,{base64_data}"
+                                        logger.info(f"Read diagram file and converted to base64 ({len(diagram_image)} chars)")
+                                        break
+                                else:
+                                    logger.warning(f"File path found but file doesn't exist: {file_path}")
+                            except Exception as e:
+                                logger.warning(f"Failed to read diagram file {file_path}: {e}")
+                    
+                    if diagram_image:
+                        break
+            
+            # Priority 2: Check full content if not found in tool results
+            if not diagram_image:
+                base64_png_match = re.search(r'data:image/png;base64,([A-Za-z0-9+/=]+)', content, re.IGNORECASE)
+                if base64_png_match:
+                    base64_data = base64_png_match.group(1)
+                    diagram_image = f"data:image/png;base64,{base64_data}"
+                    logger.info(f"Extracted PNG image from full content ({len(diagram_image)} chars)")
+            
+            # Priority 3: Try to find any base64 image data (fallback)
+            if not diagram_image:
+                # Check tool results first
+                for tool_result in tool_results_content:
+                    if isinstance(tool_result, str):
+                        # Skip error messages
+                        if tool_result.startswith('ERROR:') or 'error' in tool_result.lower()[:50]:
+                            continue
+                        
+                        base64_match = re.search(r'base64,([A-Za-z0-9+/=]{100,})', tool_result, re.IGNORECASE)
+                        if base64_match:
+                            base64_data = base64_match.group(1)
+                            diagram_image = f"data:image/png;base64,{base64_data}"
+                            logger.info(f"Extracted base64 image data from tool result ({len(diagram_image)} chars)")
+                            break
+                
+                # Check full content if still not found
+                if not diagram_image:
+                    base64_match = re.search(r'base64,([A-Za-z0-9+/=]{100,})', content, re.IGNORECASE)
+                    if base64_match:
+                        base64_data = base64_match.group(1)
+                        diagram_image = f"data:image/png;base64,{base64_data}"
+                        logger.info(f"Extracted base64 image data from full content ({len(diagram_image)} chars)")
+            
+            # Check for error messages in tool results (even if is_error flag wasn't set)
+            if not diagram_image:
+                error_indicators = [
+                    'error', 'failed', 'exception', 'traceback', 
+                    'cannot', 'unable', 'invalid', 'missing',
+                    'apologize', 'sorry', 'issue', 'problem'
+                ]
+                for tool_result in tool_results_content:
+                    if isinstance(tool_result, str):
+                        tool_result_lower = tool_result.lower()
+                        # Check if this looks like an error message
+                        if any(indicator in tool_result_lower[:200] for indicator in error_indicators):
+                            logger.warning(f"Tool result appears to contain an error message: {tool_result[:300]}")
+                            # Try to extract the actual error
+                            if 'error' in tool_result_lower or 'exception' in tool_result_lower:
+                                architecture_explanation = f"Diagram generation encountered an issue: {tool_result[:500]}"
+            
+            # Extract architecture explanation (text before or after image)
+            # Remove image data from content to get explanation
+            explanation_content = re.sub(r'data:image/[^;]+;base64,[A-Za-z0-9+/=]+', '', content, flags=re.IGNORECASE)
+            explanation_content = re.sub(r'base64,[A-Za-z0-9+/=]+', '', explanation_content, flags=re.IGNORECASE)
+            explanation_content = explanation_content.strip()
+            
+            # Try to extract a structured explanation
+            explanation_match = re.search(
+                r'(?:architecture explanation|explanation|description)[:\s]*(.*?)(?:\n\n|\n$|$)',
+                explanation_content,
+                re.IGNORECASE | re.DOTALL
+            )
+            if explanation_match:
+                architecture_explanation = explanation_match.group(1).strip()
+            elif explanation_content:
+                # Use the content as explanation if no structured format found
+                architecture_explanation = explanation_content[:1000]  # Limit length
+            
+            # If no image found, return error with detailed debugging info
+            if not diagram_image:
+                # Log detailed response structure for debugging
+                logger.warning("No PNG image found in response. The agent may not have called generate_diagram tool correctly.")
+                logger.debug(f"Response structure: {type(response)}")
+                if hasattr(response, 'message'):
+                    logger.debug(f"Response message type: {type(response.message)}")
+                    if isinstance(response.message, dict):
+                        logger.debug(f"Response message keys: {list(response.message.keys())}")
+                        if 'content' in response.message:
+                            logger.debug(f"Content type: {type(response.message['content'])}, length: {len(response.message['content']) if isinstance(response.message['content'], list) else 'N/A'}")
+                logger.debug(f"Content length: {len(content)}, preview: {content[:200]}")
+                logger.debug(f"Tool results found: {len(tool_results_content)}")
+                
+                # Check if generate_diagram tool was called at all
+                if 'generate_diagram' not in content.lower() and not any('generate_diagram' in str(tr).lower() for tr in tool_results_content):
+                    error_msg = "generate_diagram tool was not called. The agent may need better instructions."
+                elif tool_results_content:
+                    error_msg = f"generate_diagram tool was called but returned no image data. Tool result preview: {str(tool_results_content[0])[:200]}"
+                else:
+                    error_msg = "No tool results found in response. The tool may not have been invoked correctly."
+                
+                return {
+                    "content": content[:500] if content else "No diagram generated",
+                    "success": False,
+                    "mcp_servers_used": self.mcp_servers,
+                    "error": f"No PNG image data found in response. {error_msg}",
+                    "architecture_explanation": architecture_explanation,
+                    "debug_info": {
+                        "content_length": len(content),
+                        "tool_results_count": len(tool_results_content),
+                        "content_preview": content[:200]
+                    }
+                }
             
             return {
-                "content": diagram_svg,
+                "content": diagram_image,
                 "success": True,
                 "mcp_servers_used": self.mcp_servers,
-                "diagram_code": diagram_code
+                "architecture_explanation": architecture_explanation,
+                "process_followed": "5-step process: Interpret → AWS Docs → Generate Code → Execute → Return Image"
             }
         except Exception as e:
             logger.error(f"Agent {self.name} execution failed: {e}")
@@ -264,43 +698,6 @@ with Diagram("AWS Architecture", show=False):
     elb >> ec2 >> rds
     ec2 >> s3
 '''
-    
-    def _generate_diagram_svg(self, diagram_code: str, roles: List[str]) -> str:
-        """Generate SVG diagram from Python code"""
-        try:
-            # Create a temporary file with the diagram code
-            import tempfile
-            import os
-            
-            with tempfile.NamedTemporaryFile(mode='w', suffix='.py', delete=False) as f:
-                f.write(diagram_code)
-                temp_file = f.name
-            
-            # Try to execute the diagram code
-            try:
-                exec(diagram_code)
-                # If successful, look for generated files
-                for file in os.listdir('.'):
-                    if file.endswith('.png') or file.endswith('.svg'):
-                        if file.endswith('.svg'):
-                            with open(file, 'r') as f:
-                                svg_content = f.read()
-                            os.remove(file)  # Clean up
-                            os.remove(temp_file)  # Clean up temp file
-                            return svg_content
-            except Exception as e:
-                logger.warning(f"Could not execute diagram code: {e}")
-            
-            # Clean up
-            if os.path.exists(temp_file):
-                os.remove(temp_file)
-            
-            # Return an enhanced SVG as fallback
-            return self._generate_enhanced_svg(inputs)
-            
-        except Exception as e:
-            logger.error(f"Diagram generation failed: {e}")
-            return self._generate_enhanced_svg(inputs)
     
     def _generate_diagram_svg(self, diagram_code: str, inputs: Dict[str, Any]) -> str:
         """Generate SVG diagram from Python code"""
@@ -501,12 +898,10 @@ class CostEstimationAgent(SimpleStrandsAgent):
         Provide concise, structured cost estimates for AWS architectures. Focus on key cost drivers and practical recommendations."""
     
     def _create_prompt(self, inputs: Dict[str, Any]) -> str:
-        roles = inputs.get("roles", [])
         requirements = inputs.get("requirements", "")
         
         return f"""
-        Provide a concise cost estimate for the following AWS Solution Architect roles:
-        {', '.join(roles)}
+        Provide a concise cost estimate for the following AWS architecture requirements:
         
         Requirements: {requirements}
         
@@ -1193,10 +1588,28 @@ class MCPEnabledOrchestrator:
             logger.error(f"Failed to initialize MCP-enabled orchestrator: {e}")
             raise
     
-    async def execute_all(self, inputs: Dict[str, Any]) -> Dict[str, Any]:
-        """Execute all agents (CloudFormation, Diagram, Cost) sequentially with response chaining"""
+    async def execute_all(self, inputs: Dict[str, Any], generate_flags: Optional[Dict[str, bool]] = None) -> Dict[str, Any]:
+        """
+        Execute all agents with conditional generation based on flags.
+        
+        Args:
+            inputs: Agent inputs dictionary
+            generate_flags: Dict with keys "cloudformation", "diagram", "cost" and bool values
+                           If None, defaults to generating all (backward compatible)
+        """
         if not self.model:
             await self.initialize()
+        
+        # Default: generate all if flags not provided (backward compatible)
+        if generate_flags is None:
+            generate_flags = {
+                "cloudformation": True,
+                "diagram": True,
+                "cost": True
+            }
+        
+        # Ensure CloudFormation is always generated (needed for context)
+        generate_flags["cloudformation"] = True
         
         try:
             # Get MCP client wrapper from singleton manager
@@ -1219,27 +1632,44 @@ class MCPEnabledOrchestrator:
                 
                 results = {}
                 
-                # Step 1: Execute CloudFormation Agent
-                logger.info("Step 1: Executing CloudFormation agent...")
-                cf_agent = Agent(
-                    name="cloudformation-generator",
-                    model=self.model,
-                    tools=tools,
-                    system_prompt=self._get_cloudformation_prompt(),
-                    conversation_manager=self.conversation_manager
-                )
-                cf_result = await self._execute_agent(cf_agent, inputs, "cloudformation")
-                results["cloudformation"] = cf_result
-                logger.info(f"CloudFormation agent completed: {len(cf_result.get('content', ''))} characters")
+                # Step 1: Execute CloudFormation Agent (always)
+                if generate_flags.get("cloudformation", True):
+                    logger.info("Step 1: Executing CloudFormation agent...")
+                    cf_agent = Agent(
+                        name="cloudformation-generator",
+                        model=self.model,
+                        tools=tools,
+                        system_prompt=self._get_cloudformation_prompt(),
+                        conversation_manager=self.conversation_manager
+                    )
+                    cf_result = await self._execute_agent(cf_agent, inputs, "cloudformation")
+                    results["cloudformation"] = cf_result
+                    logger.info(f"CloudFormation agent completed: {len(cf_result.get('content', ''))} characters")
+                else:
+                    logger.warning("CloudFormation generation skipped (should not happen)")
+                    results["cloudformation"] = {"content": "", "success": False, "skipped": True}
                 
-                # Step 2: Summarize CloudFormation and execute Diagram Agent
-                if cf_result.get("success"):
-                    cf_summary = self._summarize_output(cf_result.get("content", ""), "cloudformation")
+                # Step 2: Generate Diagram (conditional)
+                # Use existing CF template if provided, otherwise use generated one
+                cf_content_for_diagram = ""
+                if inputs.get("existing_cloudformation_template"):
+                    cf_content_for_diagram = inputs["existing_cloudformation_template"]
+                    logger.info("Using existing CloudFormation template for diagram generation")
+                elif results.get("cloudformation", {}).get("success"):
+                    cf_content_for_diagram = results["cloudformation"].get("content", "")
+                
+                if generate_flags.get("diagram", False) and cf_content_for_diagram:
+                    # Parse CF template and create diagram-specific summary
+                    parsed_info = self._parse_cloudformation_template(cf_content_for_diagram)
+                    cf_summary = self._format_cloudformation_summary(parsed_info, for_agent="diagram")
                     logger.info(f"Step 2: CloudFormation summary ({len(cf_summary)} chars) -> Executing Diagram agent...")
                     
                     diagram_inputs = inputs.copy()
                     diagram_inputs["cloudformation_summary"] = cf_summary
-                    diagram_inputs["cloudformation_content"] = cf_result.get("content", "")[:2000]
+                    diagram_inputs["cloudformation_content"] = cf_content_for_diagram[:2000]
+                    # Also pass parsed info for better diagram generation
+                    diagram_inputs["aws_services"] = parsed_info.get("aws_services", [])
+                    diagram_inputs["resource_relationships"] = parsed_info.get("relationships", [])
                     
                     diagram_agent = Agent(
                         name="architecture-diagram-generator",
@@ -1251,51 +1681,41 @@ class MCPEnabledOrchestrator:
                     diagram_result = await self._execute_agent(diagram_agent, diagram_inputs, "diagram")
                     results["diagram"] = diagram_result
                     logger.info(f"Diagram agent completed: {len(diagram_result.get('content', ''))} characters")
-                
-                    # Step 3: Summarize Diagram output and execute Cost Agent
-                    if diagram_result.get("success"):
-                        diagram_summary = self._summarize_output(diagram_result.get("content", ""), "diagram")
-                        logger.info(f"Step 3: Diagram summary ({len(diagram_summary)} chars) -> Executing Cost agent...")
-                        
-                        cost_inputs = inputs.copy()
-                        cost_inputs["cloudformation_summary"] = cf_summary
-                        cost_inputs["diagram_summary"] = diagram_summary
-                        cost_inputs["cloudformation_content"] = cf_result.get("content", "")[:2000]
-                        
-                        cost_agent = Agent(
-                            name="cost-estimation",
-                            model=self.model,
-                            tools=tools,
-                            system_prompt=self._get_cost_prompt(),
-                            conversation_manager=self.conversation_manager
-                        )
-                        cost_result = await self._execute_agent(cost_agent, cost_inputs, "cost")
-                        results["cost"] = cost_result
-                        logger.info(f"Cost agent completed: {len(cost_result.get('content', ''))} characters")
-                    else:
-                        logger.warning("Diagram agent failed, continuing with cost estimation")
-                        cost_inputs = inputs.copy()
-                        cost_inputs["cloudformation_summary"] = cf_summary
-                        cost_agent = Agent(
-                            name="cost-estimation",
-                            model=self.model,
-                            tools=tools,
-                            system_prompt=self._get_cost_prompt(),
-                            conversation_manager=self.conversation_manager
-                        )
-                        cost_result = await self._execute_agent(cost_agent, cost_inputs, "cost")
-                        results["cost"] = cost_result
                 else:
-                    logger.error("CloudFormation agent failed, executing diagram and cost without context")
-                    diagram_agent = Agent(
-                        name="architecture-diagram-generator",
-                        model=self.model,
-                        tools=tools,
-                        system_prompt=self._get_diagram_prompt(),
-                        conversation_manager=self.conversation_manager
-                    )
-                    diagram_result = await self._execute_agent(diagram_agent, inputs, "diagram")
-                    results["diagram"] = diagram_result
+                    logger.info("Diagram generation skipped (not requested)")
+                    results["diagram"] = {"content": "", "success": False, "skipped": True}
+                
+                # Step 3: Generate Cost Estimate (conditional)
+                # Use existing artifacts if provided, otherwise use generated ones
+                cf_content_for_cost = ""
+                if inputs.get("existing_cloudformation_template"):
+                    cf_content_for_cost = inputs["existing_cloudformation_template"]
+                elif results.get("cloudformation", {}).get("success"):
+                    cf_content_for_cost = results["cloudformation"].get("content", "")
+                
+                diagram_content_for_cost = ""
+                if inputs.get("existing_diagram"):
+                    diagram_content_for_cost = inputs["existing_diagram"]
+                elif results.get("diagram", {}).get("success"):
+                    diagram_content_for_cost = results["diagram"].get("content", "")
+                
+                if generate_flags.get("cost", False):
+                    logger.info("Step 3: Executing Cost agent...")
+                    
+                    cost_inputs = inputs.copy()
+                    if cf_content_for_cost:
+                        # Parse CF template and create cost-specific summary
+                        parsed_info = self._parse_cloudformation_template(cf_content_for_cost)
+                        cf_summary = self._format_cloudformation_summary(parsed_info, for_agent="cost")
+                        cost_inputs["cloudformation_summary"] = cf_summary
+                        cost_inputs["cloudformation_content"] = cf_content_for_cost[:2000]
+                        # Also pass parsed info for better cost estimation
+                        cost_inputs["parsed_resources"] = parsed_info.get("resources", {})
+                        cost_inputs["key_properties"] = parsed_info.get("key_properties", {})
+                    
+                    if diagram_content_for_cost:
+                        diagram_summary = self._summarize_output(diagram_content_for_cost, "diagram")
+                        cost_inputs["diagram_summary"] = diagram_summary
                     
                     cost_agent = Agent(
                         name="cost-estimation",
@@ -1304,9 +1724,12 @@ class MCPEnabledOrchestrator:
                         system_prompt=self._get_cost_prompt(),
                         conversation_manager=self.conversation_manager
                     )
-                    cost_result = await self._execute_agent(cost_agent, inputs, "cost")
+                    cost_result = await self._execute_agent(cost_agent, cost_inputs, "cost")
                     results["cost"] = cost_result
-                
+                    logger.info(f"Cost agent completed: {len(cost_result.get('content', ''))} characters")
+                else:
+                    logger.info("Cost generation skipped (not requested)")
+                    results["cost"] = {"content": "", "success": False, "skipped": True}
             
             # Release the MCP client usage
             await mcp_client_manager.release_mcp_client()
@@ -1457,7 +1880,6 @@ class MCPEnabledOrchestrator:
     
     def _create_prompt_for_agent(self, inputs: Dict[str, Any], agent_type: str) -> str:
         """Create appropriate prompt for each agent type"""
-        roles = inputs.get("roles", [])
         requirements = inputs.get("requirements", "")
         detected_keywords = inputs.get("detected_keywords", [])
         detected_intents = inputs.get("detected_intents", [])
@@ -1469,13 +1891,12 @@ class MCPEnabledOrchestrator:
         """
         
         if agent_type == "cloudformation":
-            return f"""Generate a comprehensive CloudFormation template for the following AWS Solution Architect roles:
-            {', '.join(roles)}
+            return f"""Generate a comprehensive CloudFormation template based on the following requirements:
             
             {base_context}
             
             Please generate a complete CloudFormation template that includes:
-            1. All necessary AWS resources for the selected roles
+            1. All necessary AWS resources for the requirements
             2. Proper resource naming and tagging strategy
             3. Security best practices and IAM roles
             4. Cost optimization considerations
@@ -1486,85 +1907,356 @@ class MCPEnabledOrchestrator:
         elif agent_type == "diagram":
             # Include CloudFormation summary if available
             cf_summary = inputs.get("cloudformation_summary", "")
-            cf_context = f"""
+            aws_services = inputs.get("aws_services", [])
+            relationships = inputs.get("resource_relationships", [])
             
-PREVIOUS STEP OUTPUT (CloudFormation Summary):
+            cf_context = ""
+            if cf_summary:
+                cf_context = f"""
+            
+PREVIOUS STEP OUTPUT (CloudFormation Template Analysis):
 {cf_summary}
 
-Use this CloudFormation summary to inform your architecture diagram creation.
-""" if cf_summary else ""
+IMPORTANT: This summary contains parsed information from the CloudFormation template including:
+- AWS services used: {', '.join(aws_services) if aws_services else 'See summary above'}
+- Resource relationships and connections
+- Network architecture details
+
+Use this structured information to create an accurate architecture diagram that matches the CloudFormation template.
+"""
             
-            return f"""Create a comprehensive AWS architecture diagram for the following roles:
-            {', '.join(roles)}
-            
-            {base_context}{cf_context}
-            
-            Please generate an SVG diagram that shows:
-            1. All AWS services and components for the selected roles
-            2. Data flow and service relationships
-            3. Security boundaries and network architecture
-            4. High-level system architecture
-            
-            The diagram should be professional, clear, and suitable for presentation purposes.
-            Use the available MCP tools to get current AWS service information."""
+            return f"""Create a comprehensive AWS architecture diagram based on the CloudFormation template.
+
+{base_context}{cf_context}
+
+IMPORTANT: Use the AWS Diagram MCP Server tools to create the diagram. Follow these EXACT steps:
+1. FIRST: Call 'get_diagram_examples' tool to see the exact format and examples
+2. Review the examples CAREFULLY - they show code WITHOUT import statements
+3. THEN: Call 'generate_diagram' tool with Python code matching the examples EXACTLY
+4. DO NOT include import statements - the diagrams library is pre-imported
+5. The tool expects ONLY Python code (no markdown, no comments, no explanations, no imports)
+6. The tool returns PNG image data - extract and return it directly
+
+CRITICAL: 
+- You MUST call get_diagram_examples FIRST
+- DO NOT include imports - examples show code like: with Diagram("Name", show=False):
+- Match the examples EXACTLY - no imports needed
+- Use the CloudFormation summary to identify all AWS services and their relationships
+- Show data flow between services based on the resource relationships in the summary
+
+The diagram should show:
+1. All AWS services identified in the CloudFormation template
+2. Data flow and service relationships (based on Ref/GetAtt connections)
+3. Network architecture (VPCs, subnets, security groups if present)
+4. Security boundaries and access patterns
+5. High-level system architecture matching the template structure
+
+Generate the diagram using the generate_diagram tool."""
         
         elif agent_type == "cost":
             # Include summaries from previous steps if available
             cf_summary = inputs.get("cloudformation_summary", "")
             diagram_summary = inputs.get("diagram_summary", "")
+            key_properties = inputs.get("key_properties", {})
+            parsed_resources = inputs.get("parsed_resources", {})
             
             previous_steps = ""
             if cf_summary:
-                previous_steps += f"\n\nPREVIOUS STEP 1 OUTPUT (CloudFormation Summary):\n{cf_summary}\n"
+                previous_steps += f"\n\nPREVIOUS STEP 1 OUTPUT (CloudFormation Template Analysis):\n{cf_summary}\n"
             if diagram_summary:
                 previous_steps += f"\n\nPREVIOUS STEP 2 OUTPUT (Diagram Summary):\n{diagram_summary}\n"
             
-            previous_context = f"\nUse the outputs from the previous steps to inform your cost estimation.{previous_steps}" if previous_steps else ""
+            # Add key properties for cost estimation
+            if key_properties:
+                props_summary = "\nKey Resource Properties for Cost Calculation:\n"
+                for resource_name, props in list(key_properties.items())[:10]:  # Limit to 10
+                    props_str = ", ".join([f"{k}: {v}" for k, v in props.items()])
+                    props_summary += f"- {resource_name}: {props_str}\n"
+                previous_steps += props_summary
             
-            return f"""Provide a detailed cost estimate for the following AWS Solution Architect roles:
-            {', '.join(roles)}
+            previous_context = f"\n\nUse the outputs from the previous steps to provide accurate cost estimates.{previous_steps}" if previous_steps else ""
             
-            {base_context}{previous_context}
-            
-            Please provide:
-            1. Monthly cost estimate with breakdown by service
-            2. Annual cost projection
-            3. Cost optimization recommendations
-            4. Scaling cost implications
-            5. Different usage scenarios (low, medium, high traffic)
-            
-            Use the available MCP tools to get current AWS pricing information.
-            Use the CloudFormation and Diagram summaries to provide accurate cost estimates for the specific resources and architecture."""
+            return f"""Provide a detailed cost estimate based on the CloudFormation template.
+
+{base_context}{previous_context}
+
+IMPORTANT: Use the CloudFormation template analysis to identify all resources and their properties.
+The summary includes key properties like instance types, storage sizes, and resource configurations.
+
+Please provide:
+1. Monthly cost estimate with breakdown by AWS service
+2. Cost breakdown by resource type (EC2 instances, RDS databases, S3 storage, Lambda invocations, etc.)
+3. Annual cost projection
+4. Cost optimization recommendations based on the actual resources in the template
+5. Scaling cost implications (what happens if usage increases 2 times, 5 times, 10 times)
+6. Different usage scenarios (low, medium, high traffic) with cost ranges
+
+Use the available MCP tools to get current AWS pricing information.
+Pay special attention to:
+- Instance types and sizes specified in the template
+- Storage configurations (RDS allocated storage, S3 usage patterns)
+- Data transfer costs between services
+- Reserved Instance vs On-Demand pricing options
+- Free tier eligibility where applicable
+
+Format the cost estimate clearly with:
+- Total monthly cost estimate
+- Cost breakdown by service
+- Top cost drivers
+- Optimization opportunities"""
         
         return base_context
+    
+    def _parse_cloudformation_template(self, template_content: str) -> Dict[str, Any]:
+        """
+        Parse CloudFormation template to extract structured information.
+        Returns a dictionary with services, resources, relationships, and key properties.
+        """
+        template_dict = None
+        if YAML_AVAILABLE:
+            try:
+                template_dict = yaml.safe_load(template_content)
+            except Exception as e:
+                logger.warning(f"Failed to parse CloudFormation YAML, using regex fallback: {e}")
+        else:
+            logger.debug("YAML not available, using regex-based parsing")
+        
+        parsed_info = {
+            "aws_services": [],
+            "resources": {},
+            "resource_types": [],
+            "relationships": [],
+            "network_architecture": {},
+            "key_properties": {}
+        }
+        
+        if template_dict and "Resources" in template_dict:
+            resources = template_dict["Resources"]
+            
+            # Map CloudFormation resource types to AWS service names
+            service_mapping = {
+                "AWS::EC2::": "EC2",
+                "AWS::S3::": "S3",
+                "AWS::RDS::": "RDS",
+                "AWS::Lambda::": "Lambda",
+                "AWS::API::": "API Gateway",
+                "AWS::DynamoDB::": "DynamoDB",
+                "AWS::CloudFront::": "CloudFront",
+                "AWS::VPC::": "VPC",
+                "AWS::EC2::VPC": "VPC",
+                "AWS::EC2::Subnet": "VPC",
+                "AWS::EC2::SecurityGroup": "VPC",
+                "AWS::EC2::InternetGateway": "VPC",
+                "AWS::EC2::RouteTable": "VPC",
+                "AWS::EC2::Instance": "EC2",
+                "AWS::EC2::LaunchTemplate": "EC2",
+                "AWS::EC2::AutoScalingGroup": "EC2",
+                "AWS::ElasticLoadBalancing::": "ELB",
+                "AWS::ElasticLoadBalancingV2::": "ALB/NLB",
+                "AWS::SNS::": "SNS",
+                "AWS::SQS::": "SQS",
+                "AWS::CloudWatch::": "CloudWatch",
+                "AWS::IAM::": "IAM",
+                "AWS::SecretsManager::": "Secrets Manager",
+                "AWS::KMS::": "KMS",
+                "AWS::Route53::": "Route53",
+                "AWS::CloudFormation::": "CloudFormation",
+                "AWS::CodePipeline::": "CodePipeline",
+                "AWS::CodeBuild::": "CodeBuild",
+                "AWS::ECS::": "ECS",
+                "AWS::EKS::": "EKS",
+                "AWS::ElastiCache::": "ElastiCache",
+                "AWS::Redshift::": "Redshift",
+                "AWS::EMR::": "EMR",
+                "AWS::Glue::": "Glue",
+                "AWS::Athena::": "Athena",
+                "AWS::Kinesis::": "Kinesis",
+                "AWS::EventBridge::": "EventBridge",
+                "AWS::StepFunctions::": "Step Functions"
+            }
+            
+            services_found = set()
+            
+            for resource_name, resource_def in resources.items():
+                if not isinstance(resource_def, dict) or "Type" not in resource_def:
+                    continue
+                
+                resource_type = resource_def["Type"]
+                parsed_info["resource_types"].append(resource_type)
+                
+                # Extract AWS service from resource type
+                for prefix, service in service_mapping.items():
+                    if resource_type.startswith(prefix):
+                        services_found.add(service)
+                        break
+                else:
+                    # Extract service from type (e.g., AWS::EC2::Instance -> EC2)
+                    parts = resource_type.split("::")
+                    if len(parts) >= 2:
+                        services_found.add(parts[1])
+                
+                # Store resource info
+                resource_info = {
+                    "type": resource_type,
+                    "properties": resource_def.get("Properties", {})
+                }
+                parsed_info["resources"][resource_name] = resource_info
+                
+                # Extract key properties for cost estimation
+                props = resource_def.get("Properties", {})
+                if resource_type.startswith("AWS::EC2::Instance"):
+                    parsed_info["key_properties"][resource_name] = {
+                        "instance_type": props.get("InstanceType", "Unknown"),
+                        "service": "EC2"
+                    }
+                elif resource_type.startswith("AWS::RDS::"):
+                    parsed_info["key_properties"][resource_name] = {
+                        "instance_class": props.get("DBInstanceClass", "Unknown"),
+                        "engine": props.get("Engine", "Unknown"),
+                        "allocated_storage": props.get("AllocatedStorage", "Unknown"),
+                        "service": "RDS"
+                    }
+                elif resource_type.startswith("AWS::S3::"):
+                    parsed_info["key_properties"][resource_name] = {
+                        "service": "S3",
+                        "storage_class": props.get("BucketName", "Standard")
+                    }
+                elif resource_type.startswith("AWS::Lambda::"):
+                    parsed_info["key_properties"][resource_name] = {
+                        "runtime": props.get("Runtime", "Unknown"),
+                        "memory_size": props.get("MemorySize", "Unknown"),
+                        "service": "Lambda"
+                    }
+                
+                # Extract relationships (Ref, GetAtt, etc.)
+                def extract_refs(obj, path=""):
+                    """Recursively extract Ref and GetAtt references"""
+                    if isinstance(obj, dict):
+                        # Check for Ref and GetAtt at this level
+                        if "Ref" in obj:
+                            parsed_info["relationships"].append({
+                                "from": resource_name,
+                                "to": obj["Ref"],
+                                "type": "Ref",
+                                "path": path
+                            })
+                        if "Fn::GetAtt" in obj:
+                            att = obj["Fn::GetAtt"]
+                            if isinstance(att, list) and len(att) > 0:
+                                parsed_info["relationships"].append({
+                                    "from": resource_name,
+                                    "to": att[0],
+                                    "type": "GetAtt",
+                                    "attribute": att[1] if len(att) > 1 else None,
+                                    "path": path
+                                })
+                        # Recursively check nested dictionaries (skip Ref/GetAtt to avoid duplicates)
+                        for key, value in obj.items():
+                            if key not in ["Ref", "Fn::GetAtt"]:
+                                extract_refs(value, f"{path}.{key}" if path else key)
+                    elif isinstance(obj, list):
+                        for idx, item in enumerate(obj):
+                            extract_refs(item, f"{path}[{idx}]" if path else f"[{idx}]")
+                
+                extract_refs(props)
+                
+                # Extract network architecture
+                if resource_type.startswith("AWS::EC2::VPC"):
+                    parsed_info["network_architecture"]["vpc"] = resource_name
+                elif resource_type.startswith("AWS::EC2::Subnet"):
+                    if "subnets" not in parsed_info["network_architecture"]:
+                        parsed_info["network_architecture"]["subnets"] = []
+                    parsed_info["network_architecture"]["subnets"].append(resource_name)
+                elif resource_type.startswith("AWS::EC2::SecurityGroup"):
+                    if "security_groups" not in parsed_info["network_architecture"]:
+                        parsed_info["network_architecture"]["security_groups"] = []
+                    parsed_info["network_architecture"]["security_groups"].append(resource_name)
+            
+            parsed_info["aws_services"] = sorted(list(services_found))
+        
+        return parsed_info
+    
+    def _format_cloudformation_summary(self, parsed_info: Dict[str, Any], for_agent: str = "diagram") -> str:
+        """
+        Format parsed CloudFormation information into a readable summary.
+        
+        Args:
+            parsed_info: Dictionary from _parse_cloudformation_template
+            for_agent: "diagram" or "cost" - formats summary differently
+        """
+        summary_parts = []
+        
+        # AWS Services Overview
+        if parsed_info["aws_services"]:
+            summary_parts.append(f"## AWS Services Used:\n{', '.join(parsed_info['aws_services'])}\n")
+        
+        # Resources Summary
+        if parsed_info["resources"]:
+            summary_parts.append(f"## Resources ({len(parsed_info['resources'])} total):")
+            for resource_name, resource_info in list(parsed_info["resources"].items())[:20]:  # Limit to 20
+                resource_type_short = resource_info["type"].split("::")[-1]
+                summary_parts.append(f"- {resource_name} ({resource_type_short})")
+            if len(parsed_info["resources"]) > 20:
+                summary_parts.append(f"- ... and {len(parsed_info['resources']) - 20} more resources")
+            summary_parts.append("")
+        
+        # Network Architecture (important for diagrams)
+        if for_agent == "diagram" and parsed_info["network_architecture"]:
+            summary_parts.append("## Network Architecture:")
+            if "vpc" in parsed_info["network_architecture"]:
+                summary_parts.append(f"- VPC: {parsed_info['network_architecture']['vpc']}")
+            if "subnets" in parsed_info["network_architecture"]:
+                summary_parts.append(f"- Subnets: {len(parsed_info['network_architecture']['subnets'])} subnets")
+            if "security_groups" in parsed_info["network_architecture"]:
+                summary_parts.append(f"- Security Groups: {len(parsed_info['network_architecture']['security_groups'])} groups")
+            summary_parts.append("")
+        
+        # Resource Relationships (important for diagrams)
+        if for_agent == "diagram" and parsed_info["relationships"]:
+            summary_parts.append("## Key Resource Relationships:")
+            # Group relationships by type
+            refs = [r for r in parsed_info["relationships"] if r["type"] == "Ref"]
+            getatts = [r for r in parsed_info["relationships"] if r["type"] == "GetAtt"]
+            
+            if refs:
+                summary_parts.append(f"- Direct References: {len(refs)} connections")
+                for rel in refs[:5]:  # Show first 5
+                    summary_parts.append(f"  * {rel['from']} → {rel['to']}")
+                if len(refs) > 5:
+                    summary_parts.append(f"  * ... and {len(refs) - 5} more")
+            
+            if getatts:
+                summary_parts.append(f"- Attribute References: {len(getatts)} connections")
+                for rel in getatts[:5]:  # Show first 5
+                    attr_info = f" ({rel['attribute']})" if rel.get("attribute") else ""
+                    summary_parts.append(f"  * {rel['from']} → {rel['to']}{attr_info}")
+                if len(getatts) > 5:
+                    summary_parts.append(f"  * ... and {len(getatts) - 5} more")
+            summary_parts.append("")
+        
+        # Key Properties (important for cost estimation)
+        if for_agent == "cost" and parsed_info["key_properties"]:
+            summary_parts.append("## Key Resource Properties for Cost Estimation:")
+            for resource_name, props in parsed_info["key_properties"].items():
+                prop_str = ", ".join([f"{k}: {v}" for k, v in props.items()])
+                summary_parts.append(f"- {resource_name}: {prop_str}")
+            summary_parts.append("")
+        
+        return "\n".join(summary_parts)
     
     def _summarize_output(self, content: str, output_type: str) -> str:
         """Summarize agent output to pass to next agent"""
         if not content:
             return ""
         
-        # For CloudFormation templates, extract key resources and structure
+        # For CloudFormation templates, use enhanced parsing
         if output_type == "cloudformation":
-            # Extract key information: resources, properties, parameters
-            summary_lines = []
+            # Parse the template to extract structured information
+            parsed_info = self._parse_cloudformation_template(content)
             
-            # Find all resources
-            resource_pattern = r'^  ([A-Z][a-zA-Z0-9]+):'
-            resources = re.findall(resource_pattern, content, re.MULTILINE)
-            if resources:
-                summary_lines.append(f"Resources: {', '.join(set(resources))}")
-            
-            # Extract logical resource IDs (first occurrence of "Type:")
-            type_pattern = r'Type:\s+([A-Za-z0-9:]+)'
-            types = re.findall(type_pattern, content)
-            if types:
-                summary_lines.append(f"Resource Types: {', '.join(set(types[:10]))}")  # Limit to 10
-            
-            # Get first 500 chars as context
-            first_chars = content[:500].replace('\n', ' ')
-            summary_lines.append(f"Template Overview: {first_chars}")
-            
-            return "\n".join(summary_lines)
+            # Determine which agent will use this summary
+            # Default to "diagram" format (more detailed)
+            return self._format_cloudformation_summary(parsed_info, for_agent="diagram")
         
         # For diagrams, extract key components and structure
         elif output_type == "diagram":
@@ -1751,11 +2443,20 @@ class MCPKnowledgeAgent:
             raise
     
     def _get_system_prompt(self) -> str:
-        return """You are an AWS Solution Architect with comprehensive access to AWS Knowledge MCP Server and AWS Diagram MCP Server capabilities through direct MCP connections.
+        """Get system prompt based on available MCP servers"""
+        has_diagram_server = "aws-diagram-server" in self.mcp_servers
+        has_pricing_server = "aws-pricing-server" in self.mcp_servers
+        
+        base_prompt = """You are an AWS Solution Architect with comprehensive access to AWS Knowledge MCP Server capabilities through direct MCP connections.
 
         You have access to:
-        - AWS Knowledge MCP Server: Latest AWS documentation, blog posts, best practices, and official resources
-        - AWS Diagram MCP Server: Tools to generate architecture diagrams showing AWS services and their relationships
+        - AWS Knowledge MCP Server: Latest AWS documentation, blog posts, best practices, and official resources"""
+        
+        if has_diagram_server:
+            base_prompt += """
+        - AWS Diagram MCP Server: Tools to generate architecture diagrams showing AWS services and their relationships"""
+        
+        base_prompt += """
         - AWS API Server: Current AWS API information and service capabilities
         
         Your role is to provide comprehensive, accurate, and up-to-date information about:
@@ -1765,9 +2466,13 @@ class MCPKnowledgeAgent:
         - Architectural decisions and trade-offs
         - AWS pricing models and cost optimization strategies
         - Security considerations and compliance requirements
-        - Latest AWS blog posts and announcements
+        - Latest AWS blog posts and announcements"""
+        
+        if has_diagram_server:
+            base_prompt += """
         
         CRITICAL INSTRUCTIONS FOR DIAGRAM GENERATION:
+        ONLY generate diagrams when the user EXPLICITLY requests them (e.g., "show me a diagram", "create a diagram", "generate architecture diagram").
         When asked to generate diagrams, you MUST follow this exact process:
         
         STEP 1: Call 'get_diagram_examples' tool FIRST to see the exact format and examples
@@ -1808,24 +2513,34 @@ class MCPKnowledgeAgent:
         - Match the EXACT format shown in the examples (including import statements if examples show them)
         - If examples show imports like "from diagrams import Diagram", include them
         - If examples show imports like "from diagrams.aws.compute import Lambda", include them
-        - If examples DON'T show imports, don't include them (library may be pre-imported)
+        - If examples DO NOT show imports, do not include them (library may be pre-imported)
         - Pass clean Python code string to generate_diagram tool
         - Include all services from the architecture summary
         - Show all connections between services using >> operator
         
         DO NOT:
         - Skip calling get_diagram_examples - this will cause errors
-        - Include imports if the examples don't show them
+        - Include imports if the examples do not show them
         - Omit imports if the examples show them
-        - Include markdown formatting (```python) in tool call
+        - Include markdown formatting (triple backticks + python) in tool call
         - Add comments, explanations, or docstrings in the code
         - Generate multiple architecture options (choose ONE best)
         - Use any Python standard library imports
-        - Include any code that isn't directly related to diagram generation
-        - Guess the format - always check examples first
+        - Include any code that is not directly related to diagram generation
+        - Guess the format - always check examples first"""
         
-        For knowledge sharing mode, DO NOT generate CloudFormation templates, diagrams, or cost estimates.
-        Focus exclusively on knowledge sharing, guidance, and conceptual understanding.
+        if not has_diagram_server:
+            base_prompt += """
+        
+        IMPORTANT: You do NOT have access to diagram generation tools. DO NOT attempt to generate diagrams.
+        Focus exclusively on knowledge sharing, guidance, and conceptual understanding."""
+        else:
+            base_prompt += """
+        
+        For knowledge sharing mode, DO NOT generate CloudFormation templates, diagrams, or cost estimates unless explicitly requested.
+        Focus exclusively on knowledge sharing, guidance, and conceptual understanding."""
+        
+        base_prompt += """
         
         When users ask about blog posts, provide detailed information as if you have direct access to AWS blog articles, including:
         - Recent blog post titles and topics
@@ -1835,6 +2550,8 @@ class MCPKnowledgeAgent:
         
         Always include relevant links and references when discussing AWS services and best practices.
         Your responses should be comprehensive, accurate, and reflect the latest AWS information available."""
+        
+        return base_prompt
     
     def _extract_follow_up_questions(self, content: str) -> List[str]:
         """Extract follow-up questions from the response content"""
@@ -2182,6 +2899,9 @@ class MCPKnowledgeAgent:
             prompt = custom_prompt
         else:
             prompt = f"""Please provide comprehensive information about: {requirements}
+
+
+
 
             Focus on:
             - Relevant AWS services and their capabilities

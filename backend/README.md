@@ -56,8 +56,6 @@ uvicorn main:app --host 0.0.0.0 --port 8000 --no-reload
 **Core Endpoints:**
 - `GET /` - API root and version info
 - `GET /health` - Health check endpoint
-- `GET /roles` - List available AWS Solution Architect roles (legacy, for reference)
-- `POST /roles/mcp-servers` - Get MCP servers for selected roles (legacy)
 
 **Mode Endpoints:**
 - `POST /brainstorm` - AWS knowledge access for brainstorming mode
