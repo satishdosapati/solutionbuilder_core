@@ -191,25 +191,27 @@ class ArchitectureDiagramAgent(SimpleStrandsAgent):
     
     def _get_system_prompt(self) -> str:
         # Simplified prompt to reduce token usage and prevent MaxTokensReachedException
-        return """You are an AWS Solution Architect creating architecture diagrams. Follow these steps:
+        return """You are an AWS Solution Architect creating architecture diagrams using the diagrams package.
 
-STEP 1: Interpret requirements and identify AWS services needed.
+REQUIRED STEPS (must execute all):
 
-STEP 2: Use aws___search_documentation to check best practices (optional, be concise).
+1. Interpret requirements and identify AWS services
 
-STEP 3: Call get_diagram_examples FIRST, then generate Python code using diagrams package.
-- Code must NOT include imports (pre-imported)
-- Code must NOT be wrapped in markdown code blocks
-- Use show=False in Diagram() constructor
-- Create complete architecture with services, connections (>>), and data flow
+2. Call get_diagram_examples tool to see code format
 
-STEP 4: Call generate_diagram tool with ONLY the raw Python code as a string parameter named 'code'.
-- The tool returns PNG image data (base64) or file path
+3. Generate Python code for the diagram:
+   - NO imports (pre-imported)
+   - NO markdown code blocks
+   - Use show=False in Diagram() constructor
+   - Include all AWS services and connections
 
-STEP 5: Extract image data from tool result and return as: data:image/png;base64,<data>
-- Provide brief architecture explanation AFTER returning image
+4. MUST call generate_diagram tool with code parameter as plain string
+   - Example: generate_diagram(code="with Diagram(...): ...")
+   - Tool returns base64 image data or file path
 
-CRITICAL: Call get_diagram_examples first. Pass code as plain string, no markdown. Extract image data directly."""
+5. Return image data from tool response as: data:image/png;base64,<data>
+
+CRITICAL: You MUST call generate_diagram tool. Do NOT apologize about file system access. The tool handles file operations."""
     
     def _create_prompt(self, inputs: Dict[str, Any]) -> str:
         # Simplified prompt to reduce token usage
