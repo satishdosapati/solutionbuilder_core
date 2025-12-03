@@ -43,15 +43,18 @@ class SimpleStrandsAgent:
             if os.getenv('AWS_REGION'):
                 try:
                     model_id = os.getenv('BEDROCK_MODEL_ID', "anthropic.claude-3-5-sonnet-20240620-v1:0")
+                    max_tokens = int(os.getenv('BEDROCK_MAX_TOKENS', '8192'))
                     model = BedrockModel(
-                        model_id=model_id
+                        model_id=model_id,
+                        max_tokens=max_tokens
                     )
                 except Exception as e:
                     logger.warning(f"Failed to initialize Bedrock model: {e}")
             
             # Configure conversation management for production
+            # Reduced window size to prevent token overflow
             conversation_manager = SlidingWindowConversationManager(
-                window_size=10  # Keep last 10 exchanges
+                window_size=5  # Keep last 5 exchanges to reduce token usage
             )
             
             # Create the agent with the model and conversation manager
@@ -154,15 +157,23 @@ class ArchitectureDiagramAgent(SimpleStrandsAgent):
             if os.getenv('AWS_REGION') or os.getenv('AWS_DEFAULT_REGION'):
                 try:
                     model_id = os.getenv('BEDROCK_MODEL_ID', "anthropic.claude-3-5-sonnet-20240620-v1:0")
-                    model = BedrockModel(model_id=model_id)
+                    # Increase max_tokens to prevent MaxTokensReachedException
+                    # Claude 3.5 Sonnet supports up to 8192 tokens output
+                    max_tokens = int(os.getenv('BEDROCK_MAX_TOKENS', '8192'))
+                    model = BedrockModel(
+                        model_id=model_id,
+                        max_tokens=max_tokens
+                    )
+                    logger.info(f"Initialized BedrockModel with max_tokens={max_tokens}")
                 except Exception as e:
                     logger.warning(f"Failed to initialize Bedrock model: {e}")
             
             if not model:
                 raise Exception("No valid model provider available. Please configure AWS credentials.")
             
-            # Configure conversation management
-            conversation_manager = SlidingWindowConversationManager(window_size=10)
+            # Configure conversation management with smaller window to reduce token usage
+            # Reduced from 10 to 5 to prevent token overflow
+            conversation_manager = SlidingWindowConversationManager(window_size=5)
             
             # Create the agent (tools will be added during execution when MCP client is active)
             self.agent = Agent(
@@ -179,113 +190,42 @@ class ArchitectureDiagramAgent(SimpleStrandsAgent):
             raise
     
     def _get_system_prompt(self) -> str:
-        return """You are an expert AWS Solution Architect specializing in creating detailed architecture diagrams.
-        You follow a structured 5-step process to generate diagrams:
-        
-        STEP 1: Interpret Requirements
-        - Analyze the project requirements thoroughly
-        - Identify key functional and non-functional requirements
-        - Extract AWS services needed based on requirements
-        
-        STEP 2: Check AWS Documentation for Best Practices
-        - Use AWS Knowledge MCP Server tools (awsdocs_search_documentation) to search for:
-          * Architecture patterns matching the requirements
-          * AWS service best practices
-          * Security and compliance recommendations
-          * Scalability and high availability patterns
-        - Review relevant AWS documentation to ensure the architecture follows AWS best practices
-        
-        STEP 3: Generate Python Code Using the Diagrams Package
-        - Based on requirements and AWS best practices, design the architecture
-        - Call 'get_diagram_examples' tool FIRST to see the exact format and examples
-        - Review examples carefully to understand code structure (note: examples show code WITHOUT imports)
-        - Generate Python code using the diagrams package that creates:
-          * Complete AWS infrastructure architecture
-          * All necessary AWS services for the project
-          * Data flow and service relationships using >> operator
-          * Security boundaries and network architecture
-          * High availability and scalability considerations
-        
-        STEP 4: Execute the Code to Create the Diagram
-        - Call 'generate_diagram' tool with the Python code as a STRING parameter named 'code'
-        - DO NOT include import statements (diagrams library is pre-imported)
-        - DO NOT include markdown formatting, comments, or explanations in the code parameter
-        - DO NOT wrap the code in code blocks (```python ... ```)
-        - Pass ONLY the raw Python code as a plain string
-        - Use show=False in Diagram() constructor
-        - The tool will execute the code and generate a PNG image
-        - The tool response may contain:
-          * Base64 PNG image data (data:image/png;base64,...)
-          * File path to the saved diagram (e.g., generated-diagrams/diagram.png)
-          * Error message if generation failed
-        
-        STEP 5: Return the Diagram as an Image
-        - Check the generate_diagram tool result for:
-          1. Base64 image data: data:image/png;base64,<base64_data>
-          2. File path: If a file path is returned, read the file and convert to base64
-          3. Error message: If an error is returned, report it clearly
-        - Extract and return the image data exactly as provided: data:image/png;base64,<base64_data>
-        - DO NOT modify or re-encode the image data
-        - Provide a brief explanation of the architecture shown in the diagram AFTER returning the image
-        
-        CRITICAL REQUIREMENTS:
-        - ALWAYS call get_diagram_examples FIRST before generating code
-        - DO NOT include import statements in the code passed to generate_diagram
-        - DO NOT wrap code in markdown code blocks when calling generate_diagram
-        - Pass the code parameter as a plain string, not formatted text
-        - Match the exact format shown in the examples
-        - The generate_diagram tool returns PNG image data in base64 format
-        - Extract the image data directly from the tool result without modification
-        - Focus on production-ready architectures that fulfill project requirements"""
+        # Simplified prompt to reduce token usage and prevent MaxTokensReachedException
+        return """You are an AWS Solution Architect creating architecture diagrams. Follow these steps:
+
+STEP 1: Interpret requirements and identify AWS services needed.
+
+STEP 2: Use aws___search_documentation to check best practices (optional, be concise).
+
+STEP 3: Call get_diagram_examples FIRST, then generate Python code using diagrams package.
+- Code must NOT include imports (pre-imported)
+- Code must NOT be wrapped in markdown code blocks
+- Use show=False in Diagram() constructor
+- Create complete architecture with services, connections (>>), and data flow
+
+STEP 4: Call generate_diagram tool with ONLY the raw Python code as a string parameter named 'code'.
+- The tool returns PNG image data (base64) or file path
+
+STEP 5: Extract image data from tool result and return as: data:image/png;base64,<data>
+- Provide brief architecture explanation AFTER returning image
+
+CRITICAL: Call get_diagram_examples first. Pass code as plain string, no markdown. Extract image data directly."""
     
     def _create_prompt(self, inputs: Dict[str, Any]) -> str:
+        # Simplified prompt to reduce token usage
         requirements = inputs.get("requirements", "")
         cloudformation_summary = inputs.get("cloudformation_summary", "")
         aws_services = inputs.get("aws_services", [])
         
-        prompt = f"""Follow the 5-step process to generate an AWS architecture diagram:
-
-STEP 1: Interpret Requirements
-Requirements: {requirements}
-"""
-        
-        if cloudformation_summary:
-            prompt += f"""
-CloudFormation Summary (for context):
-{cloudformation_summary}
-"""
+        prompt = f"Generate AWS architecture diagram for: {requirements}"
         
         if aws_services:
-            prompt += f"""
-AWS Services Identified: {', '.join(aws_services)}
-"""
+            prompt += f"\nServices: {', '.join(aws_services[:10])}"  # Limit to 10 services
         
-        prompt += """
-STEP 2: Check AWS Documentation for Best Practices
-- Use awsdocs_search_documentation tool to search for architecture patterns and best practices
-- Search for relevant AWS services and their recommended usage patterns
-- Review security, scalability, and high availability best practices
-
-STEP 3: Generate Python Code Using the Diagrams Package
-- Call get_diagram_examples tool FIRST to see the exact format
-- Review the examples to understand the code structure (no imports needed)
-- Generate Python code that creates a comprehensive architecture diagram showing:
-  * All AWS services needed for the requirements
-  * Service connections and data flow
-  * Network architecture (VPC, subnets, etc.)
-  * Security boundaries
-  * High availability and scalability features
-
-STEP 4: Execute the Code to Create the Diagram
-- Call generate_diagram tool with ONLY the Python code (no imports, no markdown, no comments)
-- Use the exact format from the examples
-
-STEP 5: Return the Diagram as an Image
-- Extract the PNG image data from the generate_diagram response
-- Return it as: data:image/png;base64,<base64_data>
-- Provide a brief explanation of the architecture
-
-Begin with STEP 1: Interpret the requirements above, then proceed through all 5 steps."""
+        if cloudformation_summary:
+            prompt += f"\nContext: {cloudformation_summary[:500]}"  # Limit context length
+        
+        prompt += "\n\nFollow the 5-step process: 1) Interpret requirements 2) Check docs (optional) 3) Get examples then generate code 4) Call generate_diagram with code 5) Extract and return image data."
         
         return prompt
     
@@ -1551,10 +1491,12 @@ class MCPEnabledOrchestrator:
                 region = os.getenv('AWS_REGION', os.getenv('AWS_DEFAULT_REGION', 'us-east-1'))
                 logger.info(f"Attempting to initialize Bedrock model in region: {region}")
                 model_id = os.getenv('BEDROCK_MODEL_ID', "anthropic.claude-3-5-sonnet-20240620-v1:0")
-                logger.info(f"Using Bedrock model ID: {model_id}")
+                max_tokens = int(os.getenv('BEDROCK_MAX_TOKENS', '8192'))
+                logger.info(f"Using Bedrock model ID: {model_id}, max_tokens: {max_tokens}")
                 # BedrockModel reads region from AWS_REGION/AWS_DEFAULT_REGION env vars automatically
                 return BedrockModel(
-                    model_id=model_id
+                    model_id=model_id,
+                    max_tokens=max_tokens
                 )
         except Exception as e:
             logger.warning(f"Failed to initialize Bedrock model: {e}")
@@ -1562,9 +1504,11 @@ class MCPEnabledOrchestrator:
         try:
             logger.info("Attempting to initialize Bedrock model with default region")
             model_id = os.getenv('BEDROCK_MODEL_ID', "anthropic.claude-3-5-sonnet-20240620-v1:0")
-            logger.info(f"Using Bedrock model ID: {model_id}")
+            max_tokens = int(os.getenv('BEDROCK_MAX_TOKENS', '8192'))
+            logger.info(f"Using Bedrock model ID: {model_id}, max_tokens: {max_tokens}")
             return BedrockModel(
-                model_id=model_id
+                model_id=model_id,
+                max_tokens=max_tokens
             )
         except Exception as e:
             logger.warning(f"Failed to initialize Bedrock model with default region: {e}")
@@ -2387,10 +2331,12 @@ class MCPKnowledgeAgent:
             # 2. Use the inference profile ARN instead of model ID
             # 3. Or use a different model ID format
             model_id = os.getenv('BEDROCK_MODEL_ID', "anthropic.claude-3-5-sonnet-20240620-v1:0")
-            logger.info(f"Using Bedrock model ID: {model_id}")
+            max_tokens = int(os.getenv('BEDROCK_MAX_TOKENS', '8192'))
+            logger.info(f"Using Bedrock model ID: {model_id}, max_tokens: {max_tokens}")
             # BedrockModel reads region from AWS_REGION/AWS_DEFAULT_REGION env vars automatically
             return BedrockModel(
-                model_id=model_id
+                model_id=model_id,
+                max_tokens=max_tokens
             )
         except Exception as e:
             error_msg = str(e)
