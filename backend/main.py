@@ -1313,6 +1313,10 @@ async def stream_analyze(request: GenerationRequest, session_id: Optional[str] =
             question_type = classify_question(request.requirements)
             logger.info(f"Question classified as: {question_type['type']} (confidence: {question_type['confidence']})")
             
+            # Detect if user wants diagram
+            wants_diagram = detect_diagram_intent(request.requirements)
+            logger.info(f"Diagram intent detected: {wants_diagram}")
+            
             # Phase 1: Stream knowledge analysis
             logger.info("Phase 1: Streaming knowledge analysis...")
             knowledge_servers = ["aws-knowledge-server"]
@@ -1400,78 +1404,83 @@ async def stream_analyze(request: GenerationRequest, session_id: Optional[str] =
             # Signal end of knowledge phase
             yield f"data: {json.dumps({'type': 'phase_complete', 'phase': 'knowledge'})}\n\n"
             
-            # Phase 2: Generate diagram (non-streaming, send when complete)
-            logger.info("Phase 2: Generating architecture diagram...")
-            yield f"data: {json.dumps({'type': 'status', 'message': 'Generating architecture diagram...'})}\n\n"
-            
-            try:
-                # Use ArchitectureDiagramAgent which follows the 5-step process
-                from services.strands_agents_simple import ArchitectureDiagramAgent
-                # Put diagram server first (pool manager uses first server)
-                # Include AWS Knowledge server for documentation (will be combined with diagram tools)
-                diagram_servers = ["aws-diagram-server", "aws-knowledge-server"]
-                diagram_agent = ArchitectureDiagramAgent("architecture-diagram-generator", diagram_servers)
+            # Phase 2: Generate architecture diagram only if user explicitly requested it
+            diagram_content = ""
+            if wants_diagram:
+                logger.info("Phase 2: Generating architecture diagram (user requested)...")
+                yield f"data: {json.dumps({'type': 'status', 'message': 'Generating architecture diagram...'})}\n\n"
                 
-                # ArchitectureDiagramAgent follows the 5-step process automatically
-                diagram_inputs = {
-                    "requirements": request.requirements,
-                    "mode": "diagram"
-                }
-                
-                # Add analysis context if available
-                if analysis_content:
-                    diagram_inputs["analysis_summary"] = analysis_content[:2000]
-                
-                diagram_result = await diagram_agent.execute(diagram_inputs)
-                diagram_content = diagram_result.get("content", "")
-                
-                # Extract diagram content - prioritize SVG from tool responses
-                if diagram_content:
-                    import re
-                    # First, try to extract SVG directly (from tool response)
-                    svg_match = re.search(r'<svg[^>]*>.*?</svg>', diagram_content, re.DOTALL | re.IGNORECASE)
-                    if svg_match:
-                        diagram_content = svg_match.group(0)
-                        logger.info("Extracted SVG diagram from tool response")
-                    # Try base64 image data
-                    elif "data:image" in diagram_content or "base64" in diagram_content:
-                        base64_match = re.search(r'data:image/[^;]+;base64,[^\s"\'<>]+', diagram_content)
-                        if base64_match:
-                            diagram_content = base64_match.group(0)
-                            logger.info("Extracted base64 image from response")
-                    # Try Mermaid format
-                    elif "```mermaid" in diagram_content:
-                        mermaid_match = re.search(r'```mermaid\n(.*?)\n```', diagram_content, re.DOTALL)
-                        if mermaid_match:
-                            diagram_content = mermaid_match.group(1)
-                            logger.info("Extracted Mermaid diagram from response")
-                    # Try extracting from code blocks
-                    elif "```" in diagram_content:
-                        code_match = re.search(r'```(?:\w+)?\n(.*?)\n```', diagram_content, re.DOTALL)
-                        if code_match:
-                            extracted = code_match.group(1)
-                            # Check if extracted content is SVG
-                            if "<svg" in extracted:
-                                svg_match = re.search(r'<svg[^>]*>.*?</svg>', extracted, re.DOTALL | re.IGNORECASE)
-                                if svg_match:
-                                    diagram_content = svg_match.group(0)
-                                    logger.info("Extracted SVG from code block")
-                            else:
-                                diagram_content = extracted
-                                logger.info("Extracted diagram from code block")
-                
-                # Log diagram content info for debugging
-                if diagram_content:
-                    logger.info(f"Diagram extracted: {len(diagram_content)} chars, starts with: {diagram_content[:100]}")
-                    # Send diagram
-                    yield f"data: {json.dumps({'type': 'diagram', 'diagram': diagram_content})}\n\n"
-                else:
-                    logger.warning(f"No diagram content generated. Full result: {diagram_result}")
-                    yield f"data: {json.dumps({'type': 'diagram', 'diagram': '', 'error': 'Diagram generation returned empty content'})}\n\n"
+                try:
+                    # Use ArchitectureDiagramAgent which follows the 5-step process
+                    from services.strands_agents_simple import ArchitectureDiagramAgent
+                    # Put diagram server first (pool manager uses first server)
+                    # Include AWS Knowledge server for documentation (will be combined with diagram tools)
+                    diagram_servers = ["aws-diagram-server", "aws-knowledge-server"]
+                    diagram_agent = ArchitectureDiagramAgent("architecture-diagram-generator", diagram_servers)
                     
-            except Exception as e:
-                logger.error(f"Diagram generation error: {str(e)}")
-                yield f"data: {json.dumps({'type': 'diagram_error', 'error': str(e)})}\n\n"
+                    # ArchitectureDiagramAgent follows the 5-step process automatically
+                    diagram_inputs = {
+                        "requirements": request.requirements,
+                        "mode": "diagram"
+                    }
+                    
+                    # Add analysis context if available
+                    if analysis_content:
+                        diagram_inputs["analysis_summary"] = analysis_content[:2000]
+                    
+                    diagram_result = await diagram_agent.execute(diagram_inputs)
+                    diagram_content = diagram_result.get("content", "")
+                    
+                    # Extract diagram content - prioritize SVG from tool responses
+                    if diagram_content:
+                        import re
+                        # First, try to extract SVG directly (from tool response)
+                        svg_match = re.search(r'<svg[^>]*>.*?</svg>', diagram_content, re.DOTALL | re.IGNORECASE)
+                        if svg_match:
+                            diagram_content = svg_match.group(0)
+                            logger.info("Extracted SVG diagram from tool response")
+                        # Try base64 image data
+                        elif "data:image" in diagram_content or "base64" in diagram_content:
+                            base64_match = re.search(r'data:image/[^;]+;base64,[^\s"\'<>]+', diagram_content)
+                            if base64_match:
+                                diagram_content = base64_match.group(0)
+                                logger.info("Extracted base64 image from response")
+                        # Try Mermaid format
+                        elif "```mermaid" in diagram_content:
+                            mermaid_match = re.search(r'```mermaid\n(.*?)\n```', diagram_content, re.DOTALL)
+                            if mermaid_match:
+                                diagram_content = mermaid_match.group(1)
+                                logger.info("Extracted Mermaid diagram from response")
+                        # Try extracting from code blocks
+                        elif "```" in diagram_content:
+                            code_match = re.search(r'```(?:\w+)?\n(.*?)\n```', diagram_content, re.DOTALL)
+                            if code_match:
+                                extracted = code_match.group(1)
+                                # Check if extracted content is SVG
+                                if "<svg" in extracted:
+                                    svg_match = re.search(r'<svg[^>]*>.*?</svg>', extracted, re.DOTALL | re.IGNORECASE)
+                                    if svg_match:
+                                        diagram_content = svg_match.group(0)
+                                        logger.info("Extracted SVG from code block")
+                                else:
+                                    diagram_content = extracted
+                                    logger.info("Extracted diagram from code block")
+                    
+                    # Log diagram content info for debugging
+                    if diagram_content:
+                        logger.info(f"Diagram extracted: {len(diagram_content)} chars, starts with: {diagram_content[:100]}")
+                        # Send diagram
+                        yield f"data: {json.dumps({'type': 'diagram', 'diagram': diagram_content})}\n\n"
+                    else:
+                        logger.warning(f"No diagram content generated. Full result: {diagram_result}")
+                        yield f"data: {json.dumps({'type': 'diagram', 'diagram': '', 'error': 'Diagram generation returned empty content'})}\n\n"
+                        
+                except Exception as e:
+                    logger.error(f"Diagram generation error: {str(e)}")
+                    yield f"data: {json.dumps({'type': 'diagram_error', 'error': str(e)})}\n\n"
+            else:
+                logger.info("Phase 2: Skipping diagram generation - user did not request diagram")
+                yield f"data: {json.dumps({'type': 'diagram', 'diagram': ''})}\n\n"
             
             # Send completion signal with metadata
             yield f"data: {json.dumps({
