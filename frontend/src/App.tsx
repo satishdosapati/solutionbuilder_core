@@ -19,15 +19,31 @@ function App() {
   // Initialize session on mount
   useEffect(() => {
     const initializeSession = () => {
-      // Get session from localStorage or create new
-      let storedSessionId = localStorage.getItem('sessionId');
-      if (!storedSessionId) {
-        // Generate client-side UUID
-        storedSessionId = crypto.randomUUID();
-        localStorage.setItem('sessionId', storedSessionId);
+      try {
+        // Get session from localStorage or create new
+        let storedSessionId = localStorage.getItem('sessionId');
+        if (!storedSessionId) {
+          // Generate client-side UUID with fallback
+          if (typeof crypto !== 'undefined' && crypto.randomUUID) {
+            storedSessionId = crypto.randomUUID();
+          } else {
+            // Fallback UUID generator
+            storedSessionId = 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, (c) => {
+              const r = Math.random() * 16 | 0;
+              const v = c === 'x' ? r : (r & 0x3 | 0x8);
+              return v.toString(16);
+            });
+          }
+          localStorage.setItem('sessionId', storedSessionId);
+        }
+        setSessionId(storedSessionId);
+        console.log('Session initialized:', storedSessionId);
+      } catch (error) {
+        console.error('Failed to initialize session:', error);
+        // Set a temporary session ID if localStorage fails
+        const tempSessionId = `temp-${Date.now()}`;
+        setSessionId(tempSessionId);
       }
-      setSessionId(storedSessionId);
-      console.log('Session initialized:', storedSessionId);
     };
     initializeSession();
   }, []);

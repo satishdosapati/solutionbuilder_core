@@ -272,7 +272,7 @@ export const apiService = {
       return {
         knowledge_response: cleanResponseText(knowledgeContent),
         architecture_diagram: diagramContent,
-        architecture_explanation: (result as any)?.architecture_explanation || '',
+        architecture_explanation: '',
         follow_up_questions: followUpQuestions,
         mode: 'analysis',
         success: true

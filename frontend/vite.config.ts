@@ -6,8 +6,7 @@ export default defineConfig({
   server: {
     host: '0.0.0.0',
     port: 5000,
-    // Removed allowedHosts restriction for EC2 deployment
-    // Security is handled by AWS security groups
+    allowedHosts: ['.replit.dev', 'localhost'],
     proxy: {
       '/api': {
         target: 'http://localhost:8000',
