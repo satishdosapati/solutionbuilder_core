@@ -434,6 +434,19 @@ CRITICAL: You MUST call generate_diagram tool. Do NOT apologize about file syste
                         base64_data = base64_png_match.group(1)
                         diagram_image = f"data:image/png;base64,{base64_data}"
                         logger.info(f"Extracted PNG image from tool result block ({len(diagram_image)} chars)")
+                        
+                        # Save diagram to file and get URL
+                        try:
+                            from services.diagram_storage import save_diagram_from_base64
+                            diagram_name = inputs.get("requirements", "architecture")[:50]  # Use first 50 chars of requirements as name
+                            filename, diagram_url = save_diagram_from_base64(diagram_image, diagram_name)
+                            logger.info(f"Saved diagram to file: {filename}, URL: {diagram_url}")
+                            
+                            # Return URL instead of base64 (frontend can handle both)
+                            diagram_image = diagram_url
+                        except Exception as e:
+                            logger.warning(f"Failed to save diagram file, using base64: {e}")
+                            # Keep base64 as fallback
                         break
                     
                     # Priority 1b: Check for file path (diagrams are saved to generated-diagrams by default)
@@ -479,6 +492,16 @@ CRITICAL: You MUST call generate_diagram tool. Do NOT apologize about file syste
                     base64_data = base64_png_match.group(1)
                     diagram_image = f"data:image/png;base64,{base64_data}"
                     logger.info(f"Extracted PNG image from full content ({len(diagram_image)} chars)")
+                    
+                    # Save diagram to file and get URL
+                    try:
+                        from services.diagram_storage import save_diagram_from_base64
+                        diagram_name = inputs.get("requirements", "architecture")[:50]
+                        filename, diagram_url = save_diagram_from_base64(diagram_image, diagram_name)
+                        logger.info(f"Saved diagram to file: {filename}, URL: {diagram_url}")
+                        diagram_image = diagram_url
+                    except Exception as e:
+                        logger.warning(f"Failed to save diagram file, using base64: {e}")
             
             # Priority 3: Try to find any base64 image data (fallback)
             if not diagram_image:
@@ -494,6 +517,16 @@ CRITICAL: You MUST call generate_diagram tool. Do NOT apologize about file syste
                             base64_data = base64_match.group(1)
                             diagram_image = f"data:image/png;base64,{base64_data}"
                             logger.info(f"Extracted base64 image data from tool result ({len(diagram_image)} chars)")
+                            
+                            # Save diagram to file and get URL
+                            try:
+                                from services.diagram_storage import save_diagram_from_base64
+                                diagram_name = inputs.get("requirements", "architecture")[:50]
+                                filename, diagram_url = save_diagram_from_base64(diagram_image, diagram_name)
+                                logger.info(f"Saved diagram to file: {filename}, URL: {diagram_url}")
+                                diagram_image = diagram_url
+                            except Exception as e:
+                                logger.warning(f"Failed to save diagram file, using base64: {e}")
                             break
                 
                 # Check full content if still not found
@@ -503,6 +536,16 @@ CRITICAL: You MUST call generate_diagram tool. Do NOT apologize about file syste
                         base64_data = base64_match.group(1)
                         diagram_image = f"data:image/png;base64,{base64_data}"
                         logger.info(f"Extracted base64 image data from full content ({len(diagram_image)} chars)")
+                        
+                        # Save diagram to file and get URL
+                        try:
+                            from services.diagram_storage import save_diagram_from_base64
+                            diagram_name = inputs.get("requirements", "architecture")[:50]
+                            filename, diagram_url = save_diagram_from_base64(diagram_image, diagram_name)
+                            logger.info(f"Saved diagram to file: {filename}, URL: {diagram_url}")
+                            diagram_image = diagram_url
+                        except Exception as e:
+                            logger.warning(f"Failed to save diagram file, using base64: {e}")
             
             # Check for error messages in tool results (even if is_error flag wasn't set)
             if not diagram_image:

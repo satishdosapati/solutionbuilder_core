@@ -6,9 +6,12 @@ Keep this file lean — no mocks, no placeholders, only confirmed logic.
 
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import StreamingResponse
+from fastapi.responses import StreamingResponse, FileResponse
+from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 from typing import List, Dict, Optional, Any
+from contextlib import asynccontextmanager
+from pathlib import Path
 import uvicorn
 import os
 import logging
@@ -23,6 +26,7 @@ from strands import Agent
 from services.session_manager import session_manager
 from services.mcp_client_manager import mcp_client_manager
 from services.error_handler import error_handler, performance_monitor
+from services.diagram_storage import cleanup_old_diagrams, get_diagram_stats, get_diagram_path, DIAGRAMS_DIR
 
 # Load environment variables
 load_dotenv()
@@ -50,7 +54,61 @@ logger.info("AWS Solution Architect Tool starting up...")
 logger.info("Intent-based MCP server selection enabled")
 logger.info("Enhanced logging configured")
 
-app = FastAPI(title="AWS Solution Architect Tool", version="1.0.0")
+# Background cleanup task
+cleanup_task = None
+
+async def periodic_cleanup():
+    """Run cleanup every hour"""
+    while True:
+        try:
+            await asyncio.sleep(3600)  # Wait 1 hour
+            logger.info("Running periodic diagram cleanup...")
+            result = cleanup_old_diagrams(max_age_hours=24)
+            if result["deleted_count"] > 0:
+                logger.info(f"Cleanup completed: {result['deleted_count']} files deleted, {result['deleted_size_kb']} KB freed")
+        except asyncio.CancelledError:
+            logger.info("Cleanup task cancelled")
+            break
+        except Exception as e:
+            logger.error(f"Error in periodic cleanup: {e}")
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    """Manage application lifespan - startup and shutdown"""
+    # Startup: Run initial cleanup and start background task
+    logger.info("Starting application...")
+    
+    # Ensure diagrams directory exists
+    DIAGRAMS_DIR.mkdir(parents=True, exist_ok=True)
+    
+    # Run initial cleanup on startup
+    logger.info("Running initial diagram cleanup...")
+    initial_cleanup = cleanup_old_diagrams(max_age_hours=24)
+    if initial_cleanup["deleted_count"] > 0:
+        logger.info(f"Initial cleanup: {initial_cleanup['deleted_count']} files deleted")
+    
+    # Start background cleanup task
+    global cleanup_task
+    cleanup_task = asyncio.create_task(periodic_cleanup())
+    logger.info("Background cleanup task started (runs every hour)")
+    
+    yield
+    
+    # Shutdown: Cancel background task
+    logger.info("Shutting down application...")
+    if cleanup_task:
+        cleanup_task.cancel()
+        try:
+            await cleanup_task
+        except asyncio.CancelledError:
+            pass
+    logger.info("Application shutdown complete")
+
+app = FastAPI(
+    title="AWS Solution Architect Tool", 
+    version="1.0.0",
+    lifespan=lifespan
+)
 
 # CORS middleware for frontend integration
 app.add_middleware(
@@ -96,6 +154,71 @@ async def get_mcp_pool_stats():
         }
     except Exception as e:
         logger.error(f"Failed to get pool stats: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.get("/api/diagrams/{filename}")
+async def serve_diagram(filename: str):
+    """Serve diagram files"""
+    try:
+        filepath = get_diagram_path(filename)
+        if not filepath:
+            raise HTTPException(status_code=404, detail="Diagram not found")
+        
+        # Determine media type
+        if filename.endswith('.png'):
+            media_type = 'image/png'
+        elif filename.endswith('.svg'):
+            media_type = 'image/svg+xml'
+        elif filename.endswith('.jpg') or filename.endswith('.jpeg'):
+            media_type = 'image/jpeg'
+        elif filename.endswith('.pdf'):
+            media_type = 'application/pdf'
+        else:
+            media_type = 'application/octet-stream'
+        
+        return FileResponse(
+            path=str(filepath),
+            media_type=media_type,
+            filename=filename
+        )
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error serving diagram {filename}: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.post("/api/diagrams/cleanup")
+async def cleanup_diagrams_endpoint(max_age_hours: int = 24):
+    """
+    Manually trigger cleanup of old diagram files
+    
+    Args:
+        max_age_hours: Maximum age in hours before deletion (default: 24)
+    
+    Returns:
+        Cleanup statistics
+    """
+    try:
+        result = cleanup_old_diagrams(max_age_hours=max_age_hours)
+        return {
+            "success": result["success"],
+            "deleted_count": result["deleted_count"],
+            "deleted_size_kb": result.get("deleted_size_kb", 0),
+            "max_age_hours": max_age_hours,
+            "errors": result.get("errors", [])
+        }
+    except Exception as e:
+        logger.error(f"Error cleaning up diagrams: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.get("/api/diagrams/stats")
+async def get_diagram_stats_endpoint():
+    """Get statistics about stored diagrams"""
+    try:
+        stats = get_diagram_stats()
+        return stats
+    except Exception as e:
+        logger.error(f"Error getting diagram stats: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
 @app.post("/brainstorm")

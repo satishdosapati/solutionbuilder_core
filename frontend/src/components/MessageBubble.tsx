@@ -300,42 +300,55 @@ const MessageBubble: React.FC<MessageBubbleProps> = ({ message, onActionClick })
 
                     {/* Architecture Diagram Display for generate mode - only show if not empty */}
                     {message.context.result.architecture_diagram && message.context.result.architecture_diagram.trim() && (() => {
+                      const diagramContent = message.context.result.architecture_diagram.trim();
+                      const isUrl = diagramContent.startsWith('/api/diagrams/') || diagramContent.startsWith('http');
+                      
                       const downloadDiagram = () => {
-                        const diagramContent = message.context.result.architecture_diagram;
-                        let blob: Blob;
-                        let filename: string;
+                        if (isUrl) {
+                          // Download from URL
+                          const a = document.createElement('a');
+                          a.href = diagramContent;
+                          a.download = diagramContent.split('/').pop() || 'architecture-diagram.png';
+                          document.body.appendChild(a);
+                          a.click();
+                          document.body.removeChild(a);
+                        } else {
+                          // Handle base64 or SVG (existing code)
+                          let blob: Blob;
+                          let filename: string;
 
-                        if (diagramContent.startsWith('<svg')) {
-                          blob = new Blob([diagramContent], { type: 'image/svg+xml' });
-                          filename = 'architecture-diagram.svg';
-                        } else if (diagramContent.startsWith('data:image')) {
-                          const base64Match = diagramContent.match(/^data:image\/(\w+);base64,(.+)$/);
-                          if (base64Match) {
-                            const type = base64Match[1];
-                            const base64Data = base64Match[2];
-                            const byteCharacters = atob(base64Data);
-                            const byteNumbers = new Array(byteCharacters.length);
-                            for (let i = 0; i < byteCharacters.length; i++) {
-                              byteNumbers[i] = byteCharacters.charCodeAt(i);
+                          if (diagramContent.startsWith('<svg')) {
+                            blob = new Blob([diagramContent], { type: 'image/svg+xml' });
+                            filename = 'architecture-diagram.svg';
+                          } else if (diagramContent.startsWith('data:image')) {
+                            const base64Match = diagramContent.match(/^data:image\/(\w+);base64,(.+)$/);
+                            if (base64Match) {
+                              const type = base64Match[1];
+                              const base64Data = base64Match[2];
+                              const byteCharacters = atob(base64Data);
+                              const byteNumbers = new Array(byteCharacters.length);
+                              for (let i = 0; i < byteCharacters.length; i++) {
+                                byteNumbers[i] = byteCharacters.charCodeAt(i);
+                              }
+                              const byteArray = new Uint8Array(byteNumbers);
+                              blob = new Blob([byteArray], { type: `image/${type}` });
+                              filename = `architecture-diagram.${type}`;
+                            } else {
+                              return;
                             }
-                            const byteArray = new Uint8Array(byteNumbers);
-                            blob = new Blob([byteArray], { type: `image/${type}` });
-                            filename = `architecture-diagram.${type}`;
                           } else {
                             return;
                           }
-                        } else {
-                          return;
-                        }
 
-                        const url = URL.createObjectURL(blob);
-                        const a = document.createElement('a');
-                        a.href = url;
-                        a.download = filename;
-                        document.body.appendChild(a);
-                        a.click();
-                        document.body.removeChild(a);
-                        URL.revokeObjectURL(url);
+                          const url = URL.createObjectURL(blob);
+                          const a = document.createElement('a');
+                          a.href = url;
+                          a.download = filename;
+                          document.body.appendChild(a);
+                          a.click();
+                          document.body.removeChild(a);
+                          URL.revokeObjectURL(url);
+                        }
                       };
 
                       return (
@@ -355,10 +368,23 @@ const MessageBubble: React.FC<MessageBubbleProps> = ({ message, onActionClick })
                           <div className="bg-white dark:bg-gray-800 rounded-lg p-3 border border-gray-200 dark:border-gray-600">
                             {(() => {
                               const diagramContent = message.context.result.architecture_diagram.trim();
+                              const isUrl = diagramContent.startsWith('/api/diagrams/') || diagramContent.startsWith('http');
                               const isSVG = diagramContent.toLowerCase().startsWith('<svg');
                               const isBase64Image = diagramContent.toLowerCase().startsWith('data:image');
                               
-                              if (isSVG) {
+                              if (isUrl) {
+                                return (
+                                  <img
+                                    src={diagramContent}
+                                    alt="Architecture Diagram"
+                                    className="w-full h-auto rounded-lg border border-gray-300 dark:border-gray-600"
+                                    onError={(e) => {
+                                      console.error('Failed to load diagram image:', diagramContent);
+                                      e.currentTarget.style.display = 'none';
+                                    }}
+                                  />
+                                );
+                              } else if (isSVG) {
                                 return (
                                   <div
                                     className="w-full"

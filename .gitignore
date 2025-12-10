@@ -76,3 +76,6 @@ coverage.xml
 .dmypy.json
 dmypy.json
 
+# Generated diagrams
+backend/generated-diagrams/
+
