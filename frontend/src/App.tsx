@@ -9,10 +9,27 @@ import EnhancedAnalysisDisplay from './components/EnhancedAnalysisDisplay';
 function App() {
   console.log('App component rendering...');
   const [isDark, setIsDark] = useState(false);
+  const [sessionId, setSessionId] = useState<string | null>(null);
   
   // Debug: Log when component mounts
   useEffect(() => {
     console.log('App component mounted successfully');
+  }, []);
+  
+  // Initialize session on mount
+  useEffect(() => {
+    const initializeSession = () => {
+      // Get session from localStorage or create new
+      let storedSessionId = localStorage.getItem('sessionId');
+      if (!storedSessionId) {
+        // Generate client-side UUID
+        storedSessionId = crypto.randomUUID();
+        localStorage.setItem('sessionId', storedSessionId);
+      }
+      setSessionId(storedSessionId);
+      console.log('Session initialized:', storedSessionId);
+    };
+    initializeSession();
   }, []);
   
   const [conversationState, setConversationState] = useState<ConversationState>({
@@ -428,7 +445,7 @@ function App() {
         
         try {
           streamingResult = await apiService.analyzeRequirementsStream(
-            { requirements: message },
+            { requirements: message, session_id: sessionId || undefined },
             (chunk) => {
               if (chunk.type === 'knowledge' && chunk.content) {
                 streamingContent += chunk.content;
@@ -502,7 +519,7 @@ function App() {
           console.warn('Analyze streaming failed, falling back to regular API:', streamingError);
           try {
             // Fallback to regular API
-            const result = await apiService.analyzeRequirements(message);
+            const result = await apiService.analyzeRequirements({ requirements: message, session_id: sessionId || undefined });
             streamingResult = result;
             streamingContent = result.knowledge_response || '';
             diagramContent = (result as any).architecture_diagram || '';
@@ -548,6 +565,26 @@ function App() {
         if (streamingResult) {
           const finalContent = streamingContent || streamingResult.knowledge_response || 'Analysis completed.';
           
+          // Store last_analysis in conversation context if available
+          if (streamingResult.knowledge_response) {
+            updateContext({
+              last_analysis: {
+                question: message,
+                answer: streamingResult.knowledge_response,
+                services: (streamingResult as any).services || [],
+                topics: (streamingResult as any).topics || [],
+                summary: (streamingResult as any).summary || ''
+              }
+            });
+          }
+          
+          // Update session_id if returned from backend
+          if ((streamingResult as any).session_id) {
+            const newSessionId = (streamingResult as any).session_id;
+            setSessionId(newSessionId);
+            localStorage.setItem('sessionId', newSessionId);
+          }
+          
           setConversationState(prev => {
             const updatedMessages = [...prev.messages];
             const lastMessage = updatedMessages[updatedMessages.length - 1];
@@ -574,7 +611,8 @@ function App() {
             lastResult: streamingResult,
             conversationHistory: [...conversationState.context.conversationHistory, message],
             needsClarification: false,
-            clarificationQuestions: []
+            clarificationQuestions: [],
+            lastInteractionType: 'analyze'
           });
         }
         

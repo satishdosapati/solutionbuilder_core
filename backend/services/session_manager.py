@@ -4,7 +4,7 @@ Minimalist Mode 🪶
 Keep this file lean — no mocks, no placeholders, only confirmed logic.
 """
 
-from typing import Dict, Any, Optional
+from typing import Dict, Any, Optional, List
 import uuid
 import json
 import logging
@@ -126,6 +126,66 @@ class SessionManager:
             "oldest_session": min([s["created_at"] for s in self.sessions.values()], default=None),
             "newest_session": max([s["created_at"] for s in self.sessions.values()], default=None)
         }
+    
+    def set_last_analysis(
+        self,
+        session_id: str,
+        question: str,
+        answer: str,
+        services: List[str] = None,
+        topics: List[str] = None,
+        summary: str = None
+    ) -> bool:
+        """
+        Store analysis context for follow-up detection
+        
+        Args:
+            session_id: Session identifier
+            question: The question asked
+            answer: The analysis response
+            services: List of AWS services mentioned (optional, will be extracted)
+            topics: List of topics covered (optional, will be extracted)
+            summary: Summary of analysis (optional, will be generated)
+        
+        Returns:
+            True if successful, False otherwise
+        """
+        if session_id not in self.sessions:
+            return False
+        
+        from services.context_extractor import extract_analysis_context
+        
+        # Extract context if not provided
+        if not services or not topics or not summary:
+            extracted = extract_analysis_context(answer, question)
+            services = services or extracted["services"]
+            topics = topics or extracted["topics"]
+            summary = summary or extracted["summary"]
+        
+        self.sessions[session_id]["last_analysis"] = {
+            "question": question,
+            "summary": summary,
+            "services": services,
+            "topics": topics,
+            "timestamp": datetime.now().isoformat()
+        }
+        
+        self.sessions[session_id]["last_accessed"] = datetime.now()
+        logger.info(f"Stored analysis context for session {session_id}")
+        return True
+    
+    def get_last_analysis(self, session_id: str) -> Optional[Dict[str, Any]]:
+        """
+        Retrieve last analysis context for follow-up detection
+        
+        Returns:
+            Dict with analysis context or None if not found
+        """
+        session = self.get_session(session_id)
+        if not session:
+            return None
+        
+        return session.get("last_analysis")
 
 # Global session manager instance
 session_manager = SessionManager()

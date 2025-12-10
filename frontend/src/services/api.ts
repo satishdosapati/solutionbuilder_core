@@ -173,15 +173,16 @@ export const apiService = {
     }
   },
 
-  async analyzeRequirements(requirements: string) {
+  async analyzeRequirements(request: GenerationRequest & { session_id?: string }): Promise<GenerationResponse> {
     const response = await api.post('/analyze-requirements', {
-      requirements,
+      requirements: request.requirements,
+      session_id: request.session_id
     });
     return response.data;
   },
 
   // Streaming version for analyze mode
-  async analyzeRequirementsStream(request: GenerationRequest, onChunk: (chunk: { type: string; content?: string; diagram?: string; follow_up_questions?: string[]; error?: string }) => void) {
+  async analyzeRequirementsStream(request: GenerationRequest & { session_id?: string }, onChunk: (chunk: { type: string; content?: string; diagram?: string; follow_up_questions?: string[]; error?: string }) => void) {
     try {
       console.log('Starting streaming analyze request to:', `${API_BASE_URL}/stream-analyze`);
       const response = await fetch('/api/stream-analyze', {
@@ -191,6 +192,7 @@ export const apiService = {
         },
         body: JSON.stringify({
           requirements: request.requirements,
+          session_id: request.session_id
         })
       });
 

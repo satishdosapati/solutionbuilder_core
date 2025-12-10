@@ -166,12 +166,39 @@ Follow-up questions:
         raise HTTPException(status_code=500, detail=f"Failed to brainstorm AWS knowledge: {str(e)}")
 
 @app.post("/analyze-requirements")
-async def analyze_requirements(request: GenerationRequest):
+async def analyze_requirements(
+    request: GenerationRequest,
+    session_id: Optional[str] = None
+):
     """Requirements analysis using AWS knowledge and diagram capabilities"""
     
     logger.info(f"Starting requirements analysis for: '{request.requirements[:100]}...'")
     
     try:
+        # Step 1: Get or create session
+        if not session_id:
+            session_id = session_manager.create_session()
+            logger.info(f"Created new session: {session_id}")
+        else:
+            session = session_manager.get_session(session_id)
+            if not session:
+                session_id = session_manager.create_session()
+                logger.info(f"Session not found, created new session: {session_id}")
+        
+        # Step 2: Detect follow-up question
+        from services.follow_up_detector import detect_follow_up_question
+        follow_up_detection = detect_follow_up_question(request.requirements, session_id)
+        
+        previous_context = None
+        if follow_up_detection["is_follow_up"]:
+            logger.info(f"Detected follow-up question: {follow_up_detection['reasoning']}")
+            previous_context = follow_up_detection["previous_context"]
+        
+        # Step 3: Classify question type
+        from services.question_classifier import classify_question
+        question_type = classify_question(request.requirements)
+        logger.info(f"Question classified as: {question_type['type']} (confidence: {question_type['confidence']})")
+        
         # Detect if user wants diagram
         wants_diagram = detect_diagram_intent(request.requirements)
         logger.info(f"Diagram intent detected: {wants_diagram}")
@@ -196,27 +223,19 @@ async def analyze_requirements(request: GenerationRequest):
         knowledge_servers = ["aws-knowledge-server"]
         knowledge_agent = MCPKnowledgeAgent("aws-knowledge", knowledge_servers)
         
-        knowledge_prompt = f"""Analyze these AWS requirements:
-
-{request.requirements}
-
-Provide:
-- Requirements breakdown (functional/non-functional)
-- AWS service recommendations with reasoning
-- Architecture patterns and approaches
-- Scalability, security, and cost considerations
-- Use AWS documentation via MCP tools
-
-End with 2-3 follow-up questions formatted as:
-Follow-up questions:
-- [Question 1]
-- [Question 2]
-- [Question 3]"""
+        # Step 4: Generate adaptive prompt
+        from services.adaptive_prompt_generator import create_adaptive_prompt
+        adaptive_prompt = create_adaptive_prompt(
+            question=request.requirements,
+            question_type=question_type,
+            previous_context=previous_context,
+            is_follow_up=follow_up_detection["is_follow_up"]
+        )
         
         agent_inputs = {
             "requirements": request.requirements,
             "mode": "analysis",
-            "prompt": knowledge_prompt
+            "prompt": adaptive_prompt
         }
         
         logger.info("Executing Phase 1: Knowledge analysis...")
@@ -225,6 +244,25 @@ Follow-up questions:
         # Extract analysis response and follow-up questions
         analysis_content = result.get("content", "No information available")
         follow_up_questions = result.get("follow_up_questions", [])
+        tool_usage_log = result.get("tool_usage_log", [])
+        
+        # Step 5: Validate quality
+        from services.quality_validator import validate_response_quality
+        quality_validation = validate_response_quality(
+            response=analysis_content,
+            question=request.requirements,
+            question_type=question_type,
+            tool_usage_log=tool_usage_log
+        )
+        
+        logger.info(f"Quality validation: score={quality_validation['quality_score']:.2f}, passed={quality_validation['passed']}")
+        if quality_validation.get("issues"):
+            logger.warning(f"Quality issues: {quality_validation['issues']}")
+        
+        # Log quality metrics for monitoring
+        logger.info(f"Quality Metrics - Citations: {quality_validation['citation_validation']['total_citations']}, "
+                   f"Tool Usage: {quality_validation['tool_usage_validation']['doc_tool_calls']}, "
+                   f"Completeness: {quality_validation['completeness_validation']['completeness_score']:.2f}")
         
         logger.info(f"Knowledge analysis completed: {len(analysis_content)} characters of analysis, {len(follow_up_questions)} follow-up questions")
         
@@ -349,6 +387,20 @@ Follow-up questions:
         else:
             logger.info("Phase 2: Skipping diagram generation - user did not request diagram")
         
+        # Step 6: Store analysis context for future follow-ups
+        if analysis_content:
+            from services.context_extractor import extract_analysis_context
+            analysis_context = extract_analysis_context(analysis_content, request.requirements)
+            session_manager.set_last_analysis(
+                session_id=session_id,
+                question=request.requirements,
+                answer=analysis_content,
+                services=analysis_context["services"],
+                topics=analysis_context["topics"],
+                summary=analysis_context["summary"]
+            )
+            logger.info(f"Stored analysis context for session {session_id}")
+        
         return {
             "mode": "analysis",
             "question": request.requirements,
@@ -359,6 +411,10 @@ Follow-up questions:
             "response_type": "educational",
             "success": result.get("success", True),
             "follow_up_questions": follow_up_questions,
+            "session_id": session_id,
+            "is_follow_up": follow_up_detection["is_follow_up"],
+            "question_type": question_type["type"],
+            "quality_metadata": quality_validation,
             "suggestions": [
                 "Click on any follow-up question to continue the conversation",
                 "Ask about specific implementation details",
@@ -1087,8 +1143,15 @@ async def stream_generate(request: GenerationRequest, session_id: Optional[str] 
                 if follow_up_suggestions:
                     yield f"data: {json.dumps({'type': 'follow_up_suggestions', 'suggestions': follow_up_suggestions})}\n\n"
             
-            # Send completion signal
-            yield f"data: {json.dumps({'type': 'done', 'done': True})}\n\n"
+            # Send completion signal with metadata
+            yield f"data: {json.dumps({
+                'type': 'done',
+                'done': True,
+                'session_id': current_session_id,
+                'is_follow_up': follow_up_detection.get('is_follow_up', False),
+                'question_type': question_type.get('type', 'unknown'),
+                'quality_metadata': quality_validation
+            })}\n\n"
             
         except Exception as e:
             logger.error(f"Streaming generate error: {str(e)}")
@@ -1113,45 +1176,39 @@ async def stream_analyze(request: GenerationRequest, session_id: Optional[str] =
                 if not session:
                     current_session_id = session_manager.create_session()
             
+            # Step 2: Detect follow-up question
+            from services.follow_up_detector import detect_follow_up_question
+            follow_up_detection = detect_follow_up_question(request.requirements, current_session_id)
+            
+            previous_context = None
+            if follow_up_detection["is_follow_up"]:
+                logger.info(f"Detected follow-up question: {follow_up_detection['reasoning']}")
+                previous_context = follow_up_detection["previous_context"]
+            
+            # Step 3: Classify question type
+            from services.question_classifier import classify_question
+            question_type = classify_question(request.requirements)
+            logger.info(f"Question classified as: {question_type['type']} (confidence: {question_type['confidence']})")
+            
             # Phase 1: Stream knowledge analysis
             logger.info("Phase 1: Streaming knowledge analysis...")
             knowledge_servers = ["aws-knowledge-server"]
             knowledge_agent = MCPKnowledgeAgent("aws-knowledge", knowledge_servers)
             await knowledge_agent.initialize()
             
-            knowledge_prompt = f"""
-            You are an AWS Solution Architect providing comprehensive requirements analysis.
-            
-            User Requirements: {request.requirements}
-            
-            Provide a detailed analysis that:
-            - Breaks down the requirements into functional and non-functional components
-            - Recommends appropriate AWS services with reasoning
-            - Suggests architecture patterns and approaches
-            - Considers scalability, security, and cost implications
-            - Uses up-to-date AWS information from the knowledge base
-            - Provides actionable recommendations
-            
-            Focus on architectural guidance, service selection, and best practices.
-            
-            At the end of your response, suggest 2-3 specific follow-up questions that would help the user:
-            - Clarify requirements
-            - Explore architectural alternatives
-            - Understand implementation details
-            - Consider deployment strategies
-            
-            Format the follow-up questions clearly, like:
-            
-            Follow-up questions you might consider:
-            - [Question 1]
-            - [Question 2] 
-            - [Question 3]
-            """
+            # Step 4: Generate adaptive prompt
+            from services.adaptive_prompt_generator import create_adaptive_prompt
+            adaptive_prompt = create_adaptive_prompt(
+                question=request.requirements,
+                question_type=question_type,
+                previous_context=previous_context,
+                is_follow_up=follow_up_detection["is_follow_up"]
+            )
             
             agent_inputs = {
                 "requirements": request.requirements,
                 "mode": "analysis",
-                "prompt": knowledge_prompt
+                "prompt": adaptive_prompt
             }
             
             # Stream knowledge analysis
@@ -1177,6 +1234,41 @@ async def stream_analyze(request: GenerationRequest, session_id: Optional[str] =
             # Extract full analysis content and follow-up questions
             analysis_content = ''.join(streaming_content)
             follow_up_questions = knowledge_agent._extract_follow_up_questions(analysis_content)
+            
+            # Step 5: Validate quality (get tool usage from result if available)
+            from services.quality_validator import validate_response_quality
+            # Note: For streaming, we don't have tool_usage_log yet, so use empty list
+            # In production, you might want to track tool usage during streaming
+            tool_usage_log = []
+            quality_validation = validate_response_quality(
+                response=analysis_content,
+                question=request.requirements,
+                question_type=question_type,
+                tool_usage_log=tool_usage_log
+            )
+            
+            logger.info(f"Quality validation: score={quality_validation['quality_score']:.2f}, passed={quality_validation['passed']}")
+            if quality_validation.get("issues"):
+                logger.warning(f"Quality issues: {quality_validation['issues']}")
+            
+            # Log quality metrics for monitoring
+            logger.info(f"Quality Metrics - Citations: {quality_validation['citation_validation']['total_citations']}, "
+                       f"Tool Usage: {quality_validation['tool_usage_validation']['doc_tool_calls']}, "
+                       f"Completeness: {quality_validation['completeness_validation']['completeness_score']:.2f}")
+            
+            # Step 6: Store analysis context for future follow-ups
+            if analysis_content:
+                from services.context_extractor import extract_analysis_context
+                analysis_context = extract_analysis_context(analysis_content, request.requirements)
+                session_manager.set_last_analysis(
+                    session_id=current_session_id,
+                    question=request.requirements,
+                    answer=analysis_content,
+                    services=analysis_context["services"],
+                    topics=analysis_context["topics"],
+                    summary=analysis_context["summary"]
+                )
+                logger.info(f"Stored analysis context for session {current_session_id}")
             
             # Send follow-up questions
             if follow_up_questions:
@@ -1258,8 +1350,15 @@ async def stream_analyze(request: GenerationRequest, session_id: Optional[str] =
                 logger.error(f"Diagram generation error: {str(e)}")
                 yield f"data: {json.dumps({'type': 'diagram_error', 'error': str(e)})}\n\n"
             
-            # Send completion signal
-            yield f"data: {json.dumps({'type': 'done', 'done': True})}\n\n"
+            # Send completion signal with metadata
+            yield f"data: {json.dumps({
+                'type': 'done',
+                'done': True,
+                'session_id': current_session_id,
+                'is_follow_up': follow_up_detection.get('is_follow_up', False),
+                'question_type': question_type.get('type', 'unknown'),
+                'quality_metadata': quality_validation
+            })}\n\n"
             
         except Exception as e:
             logger.error(f"Streaming analyze error: {str(e)}")

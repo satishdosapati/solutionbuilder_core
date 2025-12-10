@@ -128,6 +128,13 @@ export interface ConversationContext {
   clarificationQuestions?: string[];
   sessionId?: string;
   lastInteractionType?: 'generation' | 'follow_up' | 'analysis';
+  last_analysis?: {
+    question: string;
+    answer: string;
+    services: string[];
+    topics: string[];
+    summary: string;
+  };
 }
 
 export interface FollowUpRequest {

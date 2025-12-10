@@ -10,6 +10,7 @@ import json
 import os
 import re
 import logging
+from datetime import datetime
 
 logger = logging.getLogger(__name__)
 
@@ -2555,12 +2556,15 @@ class MCPKnowledgeAgent:
             ]
     
     async def execute(self, inputs: Dict[str, Any]) -> Dict[str, Any]:
-        """Execute the Core MCP knowledge agent"""
+        """Execute the Core MCP knowledge agent with tool usage tracking"""
         if not self.model:
             await self.initialize()
 
         requirements = inputs.get("requirements", "")
         custom_prompt = inputs.get("prompt", "")
+        
+        # Initialize tool usage tracking
+        tool_usage_log = []
 
         if custom_prompt:
             prompt = custom_prompt
@@ -2645,7 +2649,7 @@ class MCPKnowledgeAgent:
             # Release the MCP client usage
             await mcp_client_manager.release_mcp_client()
 
-            # Extract content from the response message
+            # Extract content from the response message and track tool usage
             content = ""
             if hasattr(response, 'message') and isinstance(response.message, dict):
                 if 'content' in response.message and isinstance(response.message['content'], list):
@@ -2653,6 +2657,22 @@ class MCPKnowledgeAgent:
                     content_parts = []
                     for block in response.message['content']:
                         if isinstance(block, dict):
+                            # Track tool usage
+                            if block.get('type') == 'tool_use' or 'tool_use_id' in block:
+                                tool_name = block.get('name', 'unknown')
+                                tool_usage_log.append({
+                                    "tool": tool_name,
+                                    "timestamp": datetime.now().isoformat(),
+                                    "type": "tool_use"
+                                })
+                            elif block.get('type') == 'tool_result':
+                                tool_name = block.get('name', 'unknown')
+                                tool_usage_log.append({
+                                    "tool": tool_name,
+                                    "timestamp": datetime.now().isoformat(),
+                                    "type": "tool_result"
+                                })
+                            
                             # Check for tool use results (diagram tool responses)
                             if 'tool_use_id' in block or block.get('type') == 'tool_result':
                                 # Tool response - extract SVG if present
@@ -2769,12 +2789,20 @@ class MCPKnowledgeAgent:
                     # Keep original content in case it's valid but not matching our patterns
                     content = cleaned_content
 
+            # Extract follow-up questions if not in diagram mode
+            follow_up_questions = []
+            if inputs.get("mode") != "diagram":
+                follow_up_questions = self._extract_follow_up_questions(content)
+            
             return {
                 "content": content,
                 "prompt_used": prompt,
                 "mcp_servers_used": self.mcp_servers,
                 "success": True,
-                "architecture_explanation": architecture_explanation if inputs.get("mode") == "diagram" else None
+                "architecture_explanation": architecture_explanation if inputs.get("mode") == "diagram" else None,
+                "follow_up_questions": follow_up_questions,
+                "tool_usage_log": tool_usage_log,
+                "tool_usage_count": len(tool_usage_log)
             }
         except Exception as e:
             error_msg = str(e)
@@ -2832,7 +2860,9 @@ class MCPKnowledgeAgent:
                 "prompt_used": prompt,
                 "mcp_servers_used": self.mcp_servers,
                 "success": False,
-                "error": error_msg
+                "error": error_msg,
+                "tool_usage_log": tool_usage_log,
+                "tool_usage_count": len(tool_usage_log)
             }
     
     async def stream_execute(self, inputs: Dict[str, Any]):
