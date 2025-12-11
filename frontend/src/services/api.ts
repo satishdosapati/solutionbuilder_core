@@ -289,7 +289,19 @@ export const apiService = {
   },
 
   // Streaming version for generate mode
-  async generateArchitectureStream(request: GenerationRequest, onChunk: (chunk: { type: string; content?: string; cloudformation?: string; diagram?: string; cost_estimate?: any; suggestions?: string[]; error?: string }) => void) {
+  async generateArchitectureStream(request: GenerationRequest, onChunk: (chunk: { 
+    type: string; 
+    content?: string; 
+    cloudformation?: string; 
+    diagram?: string; 
+    cost_estimate?: any; 
+    suggestions?: string[]; 
+    error?: string;
+    template_outputs?: any[];
+    template_parameters?: any[];
+    resources_summary?: any;
+    deployment_instructions?: any;
+  }) => void) {
     try {
       console.log('Starting streaming generate request to:', `${API_BASE_URL}/stream-generate`);
       const response = await fetch('/api/stream-generate', {
@@ -351,7 +363,15 @@ export const apiService = {
                   onChunk({ type: 'cloudformation', content: data.content });
                 } else if (data.type === 'cloudformation_complete' && data.content) {
                   cloudformationContent = data.content;
-                  onChunk({ type: 'cloudformation_complete', cloudformation: data.content });
+                  onChunk({ 
+                    type: 'cloudformation_complete', 
+                    cloudformation: data.content,
+                    content: data.content,
+                    template_outputs: data.template_outputs,
+                    template_parameters: data.template_parameters,
+                    resources_summary: data.resources_summary,
+                    deployment_instructions: data.deployment_instructions
+                  });
                 } else if (data.type === 'diagram' && data.content) {
                   diagramContent += data.content;
                   onChunk({ type: 'diagram', content: data.content });
@@ -412,6 +432,22 @@ export const apiService = {
       architecture_context: architectureContext,
     }, {
       params: sessionId ? { session_id: sessionId } : {}
+    });
+    return response.data;
+  },
+
+  async generateDiagram(originalQuestion: string, cloudformationTemplate: string) {
+    const response = await api.post('/generate/diagram', {
+      original_question: originalQuestion,
+      cloudformation_template: cloudformationTemplate
+    });
+    return response.data;
+  },
+
+  async generatePricing(originalQuestion: string, cloudformationTemplate: string) {
+    const response = await api.post('/generate/pricing', {
+      original_question: originalQuestion,
+      cloudformation_template: cloudformationTemplate
     });
     return response.data;
   },

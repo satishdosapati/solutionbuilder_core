@@ -21,7 +21,8 @@ import re
 from datetime import datetime
 from dotenv import load_dotenv
 from services.intent_based_mcp_orchestrator import IntentBasedMCPOrchestrator
-from services.strands_agents_simple import MCPKnowledgeAgent, MCPEnabledOrchestrator
+from services.strands_agents_simple import MCPKnowledgeAgent, MCPEnabledOrchestrator, ArchitectureDiagramAgent
+from services.cloudformation_parser import parse_cloudformation_template, generate_deployment_instructions
 from strands import Agent
 from services.session_manager import session_manager
 from services.mcp_client_manager import mcp_client_manager
@@ -136,6 +137,18 @@ class GenerationResponse(BaseModel):
     mcp_servers_enabled: List[str]
     analysis_summary: Optional[Dict[str, Any]] = None  # Add analysis summary
     follow_up_suggestions: Optional[List[str]] = []  # Follow-up suggestions based on what wasn't generated
+    template_outputs: Optional[List[Dict[str, Any]]] = None  # Stack outputs
+    template_parameters: Optional[List[Dict[str, Any]]] = None  # Template parameters
+    resources_summary: Optional[Dict[str, Any]] = None  # Resources summary
+    deployment_instructions: Optional[Dict[str, Any]] = None  # Deployment instructions
+
+class DiagramRequest(BaseModel):
+    original_question: str
+    cloudformation_template: str
+
+class PricingRequest(BaseModel):
+    original_question: str
+    cloudformation_template: str
 
 @app.get("/")
 async def root():
@@ -629,162 +642,234 @@ def detect_generation_intent(requirements: str) -> Dict[str, bool]:
 
 @app.post("/generate")
 async def generate_architecture(request: GenerationRequest):
-    """Generate CloudFormation template, diagram, and cost estimate using mode-specific MCP servers"""
+    """
+    Generate Mode: Always generates CloudFormation template.
+    Returns complete template with outputs, parameters, resources, and deployment instructions.
+    Diagram and pricing are optional enhancements available via separate endpoints.
+    """
     
-    logger.info(f"Starting architecture generation for requirements: '{request.requirements[:100]}...'")
+    logger.info(f"Starting CloudFormation generation for requirements: '{request.requirements[:100]}...'")
     
     try:
-        # Detect user intent for conditional generation
-        generate_flags = detect_generation_intent(request.requirements)
-        
-        # If existing artifacts are provided, use them instead of regenerating
-        if request.existing_cloudformation_template:
-            logger.info("Using existing CloudFormation template as context")
-            generate_flags["cloudformation"] = False  # Don't regenerate, use existing
-        if request.existing_diagram:
-            logger.info("Using existing diagram as context")
-            generate_flags["diagram"] = False  # Don't regenerate, use existing
-        if request.existing_cost_estimate:
-            logger.info("Using existing cost estimate as context")
-            generate_flags["cost"] = False  # Don't regenerate, use existing
-        
-        logger.info(f"Generation flags: CF={generate_flags['cloudformation']}, Diagram={generate_flags['diagram']}, Cost={generate_flags['cost']}")
-        
-        # Get generate mode servers from mode_server_manager
-        logger.info("Step 1: Getting generate mode MCP servers...")
+        # Always generate CloudFormation template (core functionality)
+        # Use only cfn-server for CloudFormation generation
         from services.mode_server_manager import mode_server_manager
         generate_servers_config = mode_server_manager.get_servers_for_mode("generate")
-        generate_servers = [server["name"] for server in generate_servers_config]
-        logger.info(f"Generate mode MCP servers (before filtering): {generate_servers}")
         
-        # Step 2: Analyze requirements for logging and context
-        logger.info("Step 2: Analyzing requirements for context...")
+        # Filter to only CloudFormation server for initial generation
+        cfn_servers = ["cfn-server"]
+        logger.info(f"Using MCP servers for CloudFormation generation: {cfn_servers}")
+        
+        # Analyze requirements for context
         intent_orchestrator = IntentBasedMCPOrchestrator()
         analysis = intent_orchestrator.analyze_requirements(request.requirements)
         summary = intent_orchestrator.get_analysis_summary(analysis)
         
-        logger.info(f"Requirements analysis: {len(analysis.detected_keywords)} keywords, {len(analysis.detected_intents)} intents")
+        # Initialize orchestrator with CloudFormation server only
+        strands_orchestrator = MCPEnabledOrchestrator(cfn_servers)
+        await strands_orchestrator.initialize()
         
-        # Step 3: Filter servers based on user intent - only include diagram/pricing servers if requested
-        logger.info("🔧 Step 3: Filtering MCP servers based on user intent...")
-        filtered_servers = []
-        for server in generate_servers_config:
-            server_name = server["name"]
-            # Always include core servers (cfn-server, aws-knowledge-server, etc.)
-            if server_name == "aws-diagram-server" and not generate_flags.get("diagram", False):
-                logger.info(f"Skipping {server_name} - user did not request diagram")
-                continue
-            if server_name == "aws-pricing-server" and not generate_flags.get("cost", False):
-                logger.info(f"Skipping {server_name} - user did not request pricing")
-                continue
-            filtered_servers.append(server_name)
-        
-        logger.info(f"Filtered MCP servers: {filtered_servers}")
-        
-        # Step 4: Initialize MCP-enabled orchestrator with filtered servers
-        logger.info("🔧 Step 4: Initializing MCP-enabled orchestrator with filtered servers...")
-        strands_orchestrator = MCPEnabledOrchestrator(filtered_servers)
-        
-        # Step 5: Execute agents conditionally based on detected intent
-        logger.info("⚡ Step 5: Executing Strands agents with conditional generation...")
+        # Generate CloudFormation template
         agent_inputs = {
             "requirements": request.requirements,
             "detected_keywords": analysis.detected_keywords,
             "detected_intents": analysis.detected_intents,
             "complexity_level": analysis.complexity_level,
-            "analysis_reasoning": analysis.reasoning,
-            "existing_cloudformation_template": request.existing_cloudformation_template,
-            "existing_diagram": request.existing_diagram,
-            "existing_cost_estimate": request.existing_cost_estimate
+            "analysis_reasoning": analysis.reasoning
         }
         
+        # Execute CloudFormation generation
+        generate_flags = {"cloudformation": True, "diagram": False, "cost": False}
         results = await strands_orchestrator.execute_all(agent_inputs, generate_flags)
         
-        # Step 6: Process results - use existing artifacts if provided, otherwise use generated ones
-        logger.info("📋 Step 6: Processing agent results...")
         cloudformation_result = results.get("cloudformation", {})
-        diagram_result = results.get("diagram", {})
-        cost_result = results.get("cost", {})
+        cloudformation_template = cloudformation_result.get("content", "")
         
-        # Use existing artifacts if provided
-        if request.existing_cloudformation_template:
-            cloudformation_result = {
-                "content": request.existing_cloudformation_template,
-                "success": True,
-                "from_existing": True
-            }
-        if request.existing_diagram:
-            diagram_result = {
-                "content": request.existing_diagram,
-                "success": True,
-                "from_existing": True
-            }
-        if request.existing_cost_estimate:
-            cost_result = {
-                "content": request.existing_cost_estimate,
-                "success": True,
-                "from_existing": True
-            }
+        if not cloudformation_template or cloudformation_template.startswith("# Error"):
+            raise Exception("Failed to generate CloudFormation template")
         
-        # Check success rate
-        success_count = sum(1 for result in results.values() if result.get("success", False))
-        logger.info(f"Successfully executed {success_count}/{len(results)} agents")
+        # Parse template to extract structured information
+        parsed_template = parse_cloudformation_template(cloudformation_template)
         
-        # Handle structured cost data (only if generated)
-        cost_estimate = {}
-        if generate_flags.get("cost", False) and cost_result.get("success"):
-            cost_content = cost_result.get("content", {})
-            if isinstance(cost_content, dict):
-                cost_estimate = {
-                    "monthly_cost": cost_content.get("monthly_cost", "$500-1000"),
-                    "cost_drivers": cost_content.get("cost_drivers", []),
-                    "optimizations": cost_content.get("optimizations", []),
-                    "scaling": cost_content.get("scaling", "Costs scale linearly with usage"),
-                    "architecture_type": cost_content.get("architecture_type", "Multi-service"),
-                    "region": cost_content.get("region", "us-east-1")
-                }
-            else:
-                cost_estimate = {
-                    "monthly_cost": "$500-1000",
-                    "breakdown": str(cost_content) if cost_content else "Error generating cost estimate"
-                }
-        else:
-            cost_estimate = {
-                "monthly_cost": None,
-                "message": "Cost estimate not generated. Ask for pricing details if needed."
-            }
+        # Generate deployment instructions
+        region = "us-east-1"  # Default region
+        deployment_instructions = generate_deployment_instructions(cloudformation_template, region)
         
-        # Generate follow-up suggestions based on what wasn't generated
-        follow_up_suggestions = []
-        if not generate_flags.get("diagram", False):
-            follow_up_suggestions.append("Show me the architecture diagram")
-        if not generate_flags.get("cost", False):
-            follow_up_suggestions.append("What's the estimated cost?")
-        if not generate_flags.get("diagram", False) and not generate_flags.get("cost", False):
-            follow_up_suggestions.append("Show me both the diagram and cost estimate")
+        # Always suggest diagram and pricing (they're optional enhancements)
+        follow_up_suggestions = [
+            "Show me the architecture diagram",
+            "What's the estimated cost?"
+        ]
         
-        # Log final results
-        logger.info(f"🎉 Architecture generation completed successfully!")
-        logger.info(f"   - CloudFormation template generated: {len(cloudformation_result.get('content', ''))} characters")
-        if generate_flags.get("diagram"):
-            logger.info(f"   - Architecture diagram generated: {len(diagram_result.get('content', ''))} characters")
-        if generate_flags.get("cost"):
-            logger.info(f"   - Cost estimate generated: {cost_estimate.get('monthly_cost', 'N/A')}")
+        logger.info(f"✅ CloudFormation template generated: {len(cloudformation_template)} characters")
+        logger.info(f"   - Resources: {parsed_template['total_resources']}")
+        logger.info(f"   - Outputs: {len(parsed_template['outputs'])}")
+        logger.info(f"   - Parameters: {len(parsed_template['parameters'])}")
         
         return GenerationResponse(
-            cloudformation_template=cloudformation_result.get("content", "# Error generating template"),
-            architecture_diagram=diagram_result.get("content", "") if generate_flags.get("diagram") else "",
-            cost_estimate=cost_estimate,
-            mcp_servers_enabled=generate_servers,
+            cloudformation_template=cloudformation_template,
+            architecture_diagram="",  # Empty - generated on-demand via /generate/diagram
+            cost_estimate={
+                "monthly_cost": None,
+                "message": "Cost estimate not generated. Click 'Estimate Costs' to generate."
+            },
+            mcp_servers_enabled=cfn_servers,
             analysis_summary=summary,
-            follow_up_suggestions=follow_up_suggestions
+            follow_up_suggestions=follow_up_suggestions,
+            template_outputs=parsed_template["outputs"],
+            template_parameters=parsed_template["parameters"],
+            resources_summary={
+                "total_resources": parsed_template["total_resources"],
+                "resource_types": parsed_template["resource_types"],
+                "aws_services": parsed_template["aws_services"],
+                "resources": parsed_template["resources"][:20]  # Limit to first 20 for response size
+            },
+            deployment_instructions=deployment_instructions
         )
     
     except Exception as e:
-        logger.error(f"❌ Failed to generate architecture: {str(e)}")
+        logger.error(f"❌ Failed to generate CloudFormation template: {str(e)}")
         logger.error(f"   - Requirements: {request.requirements}")
         logger.error(f"   - Error type: {type(e).__name__}")
-        raise HTTPException(status_code=500, detail=f"Failed to generate architecture: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Failed to generate CloudFormation template: {str(e)}")
+
+@app.post("/generate/diagram")
+async def generate_diagram_from_template(request: DiagramRequest):
+    """
+    Generate architecture diagram from existing CloudFormation template.
+    Uses diagram MCP server with CF template context.
+    Regenerates diagram every time (no caching).
+    """
+    
+    logger.info(f"Generating architecture diagram from CloudFormation template (length: {len(request.cloudformation_template)} chars)")
+    
+    try:
+        # Parse CloudFormation template to extract context
+        parsed_template = parse_cloudformation_template(request.cloudformation_template)
+        
+        # Use diagram server + knowledge server for documentation
+        diagram_servers = ["aws-diagram-server", "aws-knowledge-server"]
+        diagram_agent = ArchitectureDiagramAgent("architecture-diagram-generator", diagram_servers)
+        
+        # Create diagram inputs with CloudFormation context
+        diagram_inputs = {
+            "requirements": request.original_question,
+            "mode": "diagram",
+            "cloudformation_summary": f"""
+CloudFormation Template Summary:
+- AWS Services: {', '.join(parsed_template['aws_services'])}
+- Total Resources: {parsed_template['total_resources']}
+- Resource Types: {', '.join(list(parsed_template['resource_types'].keys())[:10])}
+
+Key Resources:
+{chr(10).join([f"- {r['logical_id']} ({r['type']}): {r['properties_summary']}" for r in parsed_template['resources'][:15]])}
+""",
+            "aws_services": parsed_template["aws_services"],
+            "cloudformation_content": request.cloudformation_template[:2000]  # Limit for context
+        }
+        
+        # Generate diagram
+        diagram_result = await diagram_agent.execute(diagram_inputs)
+        diagram_content = diagram_result.get("content", "")
+        architecture_explanation = diagram_result.get("architecture_explanation", "")
+        
+        if not diagram_content:
+            raise Exception("Diagram generation returned empty content")
+        
+        logger.info(f"✅ Architecture diagram generated: {len(diagram_content)} characters")
+        
+        return {
+            "architecture_diagram": diagram_content,
+            "architecture_explanation": architecture_explanation,
+            "mcp_servers_used": diagram_servers,
+            "success": True
+        }
+    
+    except Exception as e:
+        logger.error(f"❌ Failed to generate architecture diagram: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Failed to generate architecture diagram: {str(e)}")
+
+@app.post("/generate/pricing")
+async def generate_cost_estimate(request: PricingRequest):
+    """
+    Generate cost estimate from existing CloudFormation template.
+    Uses pricing MCP server with CF template context.
+    Regenerates estimate every time (no caching).
+    """
+    
+    logger.info(f"Generating cost estimate from CloudFormation template (length: {len(request.cloudformation_template)} chars)")
+    
+    try:
+        # Parse CloudFormation template to extract resources
+        parsed_template = parse_cloudformation_template(request.cloudformation_template)
+        
+        # Use pricing server for cost estimation
+        from services.mode_server_manager import mode_server_manager
+        pricing_servers = ["aws-pricing-server"]
+        
+        # Initialize orchestrator with pricing server
+        strands_orchestrator = MCPEnabledOrchestrator(pricing_servers)
+        await strands_orchestrator.initialize()
+        
+        # Create cost estimation inputs with CloudFormation context
+        cost_inputs = {
+            "requirements": request.original_question,
+            "detected_keywords": [],
+            "detected_intents": [],
+            "complexity_level": "medium",
+            "analysis_reasoning": [],
+            "cloudformation_summary": f"""
+CloudFormation Template Analysis:
+- AWS Services: {', '.join(parsed_template['aws_services'])}
+- Total Resources: {parsed_template['total_resources']}
+- Resource Types: {', '.join(list(parsed_template['resource_types'].keys()))}
+
+Resources for Cost Estimation:
+{chr(10).join([f"- {r['logical_id']} ({r['type']}): {r['properties_summary']}" for r in parsed_template['resources']])}
+""",
+            "cloudformation_content": request.cloudformation_template[:2000],
+            "parsed_resources": {r["logical_id"]: r for r in parsed_template["resources"]},
+            "key_properties": {r["logical_id"]: {"type": r["type"], "summary": r["properties_summary"]} for r in parsed_template["resources"]}
+        }
+        
+        # Generate cost estimate
+        generate_flags = {"cloudformation": False, "diagram": False, "cost": True}
+        results = await strands_orchestrator.execute_all(cost_inputs, generate_flags)
+        
+        cost_result = results.get("cost", {})
+        cost_content = cost_result.get("content", {})
+        
+        # Parse cost estimate response
+        if isinstance(cost_content, dict):
+            cost_estimate = {
+                "monthly_cost": cost_content.get("monthly_cost", "$500-1000"),
+                "cost_drivers": cost_content.get("cost_drivers", []),
+                "optimizations": cost_content.get("optimizations", []),
+                "scaling": cost_content.get("scaling", "Costs scale linearly with usage"),
+                "architecture_type": cost_content.get("architecture_type", "Multi-service"),
+                "region": cost_content.get("region", "us-east-1")
+            }
+        else:
+            # Try to extract cost from text response
+            import re
+            monthly_match = re.search(r'\$[\d,]+(?:-\$[\d,]+)?', str(cost_content))
+            cost_estimate = {
+                "monthly_cost": monthly_match.group(0) if monthly_match else "$500-1000",
+                "breakdown": str(cost_content)[:500] if cost_content else "Error generating cost estimate",
+                "region": "us-east-1"
+            }
+        
+        logger.info(f"✅ Cost estimate generated: {cost_estimate.get('monthly_cost', 'N/A')}")
+        
+        return {
+            "cost_estimate": cost_estimate,
+            "mcp_servers_used": pricing_servers,
+            "success": True
+        }
+    
+    except Exception as e:
+        logger.error(f"❌ Failed to generate cost estimate: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Failed to generate cost estimate: {str(e)}")
 
 @app.post("/follow-up")
 async def handle_follow_up_question(request: FollowUpRequest, session_id: Optional[str] = None):
@@ -1092,8 +1177,24 @@ async def stream_generate(request: GenerationRequest, session_id: Optional[str] 
                                         cf_content += text_content
                                         yield f"data: {json.dumps({'type': 'cloudformation', 'content': text_content})}\n\n"
                         
-                        # Send CloudFormation complete signal with full content
-                        yield f"data: {json.dumps({'type': 'cloudformation_complete', 'content': cf_content})}\n\n"
+                        # Parse template to extract structured information
+                        parsed_template = parse_cloudformation_template(cf_content)
+                        deployment_instructions = generate_deployment_instructions(cf_content, "us-east-1")
+                        
+                        # Send CloudFormation complete signal with full content and parsed data
+                        yield f"data: {json.dumps({
+                            'type': 'cloudformation_complete',
+                            'content': cf_content,
+                            'template_outputs': parsed_template['outputs'],
+                            'template_parameters': parsed_template['parameters'],
+                            'resources_summary': {
+                                'total_resources': parsed_template['total_resources'],
+                                'resource_types': parsed_template['resource_types'],
+                                'aws_services': parsed_template['aws_services'],
+                                'resources': parsed_template['resources'][:20]
+                            },
+                            'deployment_instructions': deployment_instructions
+                        })}\n\n"
                 except Exception as e:
                     logger.error(f"Error generating CloudFormation template: {e}")
                     yield f"data: {json.dumps({'type': 'error', 'error': str(e)})}\n\n"
@@ -1266,14 +1367,11 @@ async def stream_generate(request: GenerationRequest, session_id: Optional[str] 
                 if follow_up_suggestions:
                     yield f"data: {json.dumps({'type': 'follow_up_suggestions', 'suggestions': follow_up_suggestions})}\n\n"
             
-            # Send completion signal with metadata
+            # Send completion signal
             yield f"data: {json.dumps({
                 'type': 'done',
                 'done': True,
-                'session_id': current_session_id,
-                'is_follow_up': follow_up_detection.get('is_follow_up', False),
-                'question_type': question_type.get('type', 'unknown'),
-                'quality_metadata': quality_validation
+                'session_id': current_session_id
             })}\n\n"
             
         except Exception as e:

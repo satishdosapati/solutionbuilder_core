@@ -716,13 +716,26 @@ function App() {
                     const updatedMessages = [...prev.messages];
                     const lastMessage = updatedMessages[updatedMessages.length - 1];
                     if (lastMessage && lastMessage.type === 'assistant') {
-                      lastMessage.content = '✅ CloudFormation template generated\n\nGenerating architecture diagram...';
+                      lastMessage.content = '✅ CloudFormation template generated';
                       // Store full template in context for download/deploy
                       if (!lastMessage.context) lastMessage.context = {};
                       if (!lastMessage.context.result) lastMessage.context.result = {};
                       lastMessage.context.result.cloudformation_template = cloudformationContent;
                       // Store the full MCP server response
                       lastMessage.context.result.cloudformation_response = cloudformationContent;
+                      // Store parsed template data if available
+                      if (chunk.template_outputs) {
+                        lastMessage.context.result.template_outputs = chunk.template_outputs;
+                      }
+                      if (chunk.template_parameters) {
+                        lastMessage.context.result.template_parameters = chunk.template_parameters;
+                      }
+                      if (chunk.resources_summary) {
+                        lastMessage.context.result.resources_summary = chunk.resources_summary;
+                      }
+                      if (chunk.deployment_instructions) {
+                        lastMessage.context.result.deployment_instructions = chunk.deployment_instructions;
+                      }
                     }
                     return { ...prev, messages: updatedMessages };
                   });
@@ -795,7 +808,14 @@ function App() {
                   cloudformation_template: streamingResult?.cloudformation_template || cloudformationContent,
                   architecture_diagram: streamingResult?.architecture_diagram || diagramContent,
                   cost_estimate: streamingResult?.cost_estimate || costEstimate,
-                  follow_up_suggestions: streamingResult?.follow_up_suggestions || followUpSuggestions
+                  follow_up_suggestions: streamingResult?.follow_up_suggestions || followUpSuggestions,
+                  // Note: For streaming, template parsing happens on backend when complete
+                  // These fields will be populated if backend sends them
+                  template_outputs: (streamingResult as any)?.template_outputs,
+                  template_parameters: (streamingResult as any)?.template_parameters,
+                  resources_summary: (streamingResult as any)?.resources_summary,
+                  deployment_instructions: (streamingResult as any)?.deployment_instructions,
+                  mcp_servers_enabled: streamingResult?.mcp_servers_enabled || []
                 };
                 lastMessage.context = {
                   result: finalResult,
@@ -845,9 +865,14 @@ function App() {
                 lastMessage.context = {
                   result: {
                     cloudformation_template: result.cloudformation_template,
-                    architecture_diagram: result.architecture_diagram,
+                    architecture_diagram: result.architecture_diagram || '',
                     cost_estimate: result.cost_estimate,
-                    follow_up_suggestions: result.follow_up_suggestions || []
+                    follow_up_suggestions: result.follow_up_suggestions || [],
+                    template_outputs: (result as any).template_outputs,
+                    template_parameters: (result as any).template_parameters,
+                    resources_summary: (result as any).resources_summary,
+                    deployment_instructions: (result as any).deployment_instructions,
+                    mcp_servers_enabled: result.mcp_servers_enabled || []
                   },
                   suggestions: generateSuggestions(result, currentMode),
                   actions: generateActionButtons(result, currentMode),

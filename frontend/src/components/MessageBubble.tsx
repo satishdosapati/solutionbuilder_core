@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { ChatMessage } from '../types';
 import EnhancedAnalysisDisplay from './EnhancedAnalysisDisplay';
+import GenerateOutputDisplay from './GenerateOutputDisplay';
 
 interface MessageBubbleProps {
   message: ChatMessage;
@@ -434,10 +435,25 @@ const MessageBubble: React.FC<MessageBubbleProps> = ({ message, onActionClick })
               
               {/* Show CloudFormation template and buttons for generate mode */}
               {!isUser && message.mode === 'generate' && message.context?.result?.cloudformation_template && (
-                <CloudFormationTemplateDisplay 
-                  template={message.context.result.cloudformation_template}
-                  costEstimate={message.context.result.cost_estimate}
-                />
+                <>
+                  {/* Use GenerateOutputDisplay if we have enhanced structure (outputs, deployment instructions) */}
+                  {message.context.result.template_outputs || message.context.result.deployment_instructions ? (
+                    <GenerateOutputDisplay
+                      results={message.context.result}
+                      originalQuestion={message.content}
+                      onUpdate={(updatedResults) => {
+                        // Update message context when diagram or pricing is generated
+                        // The parent component will handle the update through message state
+                        console.log('Results updated:', updatedResults);
+                      }}
+                    />
+                  ) : (
+                    <CloudFormationTemplateDisplay 
+                      template={message.context.result.cloudformation_template}
+                      costEstimate={message.context.result.cost_estimate}
+                    />
+                  )}
+                </>
               )}
 
               {/* CloudFormation MCP Server Response Display - Show while streaming or when complete */}
