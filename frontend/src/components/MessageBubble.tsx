@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { ChatMessage } from '../types';
 import EnhancedAnalysisDisplay from './EnhancedAnalysisDisplay';
 
@@ -6,6 +6,155 @@ interface MessageBubbleProps {
   message: ChatMessage;
   onActionClick?: (action: string) => void;
 }
+
+// Component for CloudFormation template display with expand/collapse
+const CloudFormationTemplateDisplay: React.FC<{ template: string; costEstimate?: any }> = ({ template, costEstimate }) => {
+  const [isExpanded, setIsExpanded] = useState(false);
+
+  const getCleanTemplate = (template: string): string => {
+    if (!template) return '';
+    
+    // Remove markdown code blocks
+    let clean = template.replace(/```(?:yaml|yml)?\s*\n?/g, '').replace(/```\s*$/g, '').trim();
+    
+    // Find the actual YAML content start
+    const yamlStartPatterns = [
+      /AWSTemplateFormatVersion/,
+      /^Resources:/m,
+      /^Parameters:/m,
+      /^Outputs:/m,
+      /^Mappings:/m,
+      /^Conditions:/m,
+      /^Transform:/m,
+      /^---/m,
+    ];
+    
+    let startIndex = -1;
+    for (const pattern of yamlStartPatterns) {
+      const match = clean.search(pattern);
+      if (match !== -1) {
+        startIndex = match;
+        break;
+      }
+    }
+    
+    if (startIndex !== -1) {
+      clean = clean.substring(startIndex);
+    }
+    
+    // Remove trailing markdown code blocks or explanatory text
+    // Look for common patterns that indicate end of YAML template
+    const endMarkers = [
+      /\n```/,
+      /\n\s*---\s*$/,
+      /\n\s*#+\s*Note:/i,
+      /\n\s*#+\s*This template/i,
+      /\n\s*#+\s*End of template/i,
+      /\n\s*#+\s*For more information/i,
+    ];
+    
+    for (const marker of endMarkers) {
+      const match = clean.search(marker);
+      if (match !== -1) {
+        clean = clean.substring(0, match).trim();
+        break;
+      }
+    }
+    
+    return clean;
+  };
+
+  const downloadTemplate = () => {
+    if (template) {
+      const cleanTemplate = getCleanTemplate(template);
+      const blob = new Blob([cleanTemplate], { type: 'text/yaml' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = 'cloudformation-template.yaml';
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+    }
+  };
+
+  const openAWSConsole = () => {
+    const region = costEstimate?.region || 'us-east-1';
+    const cloudFormationUrl = `https://console.aws.amazon.com/cloudformation/home?region=${region}#/stacks/create`;
+    window.open(cloudFormationUrl, '_blank');
+    
+    if (template) {
+      const cleanTemplate = getCleanTemplate(template);
+      navigator.clipboard.writeText(cleanTemplate).then(() => {
+        console.log('Template copied to clipboard');
+      }).catch(err => {
+        console.error('Failed to copy template:', err);
+      });
+    }
+  };
+
+  const cleanTemplate = getCleanTemplate(template);
+  const templateLines = cleanTemplate.split('\n').length;
+
+  return (
+    <div className="mt-4 space-y-3">
+      {/* CloudFormation Template Preview */}
+      <div className="p-4 bg-gray-50 dark:bg-gray-700 rounded-lg">
+        <div className="flex justify-between items-center mb-3">
+          <div>
+            <h4 className="font-semibold text-gray-800 dark:text-gray-200">⚡ CloudFormation Template</h4>
+            {templateLines > 0 && (
+              <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
+                {templateLines} lines • {cleanTemplate.length.toLocaleString()} characters
+              </p>
+            )}
+          </div>
+          <div className="flex gap-2">
+            <button
+              onClick={() => setIsExpanded(!isExpanded)}
+              className="px-3 py-1.5 text-sm bg-gray-200 dark:bg-gray-600 text-gray-700 dark:text-gray-300 rounded-lg hover:bg-gray-300 dark:hover:bg-gray-500 transition-colors flex items-center gap-1.5"
+            >
+              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d={isExpanded ? "M5 15l7-7 7 7" : "M19 9l-7 7-7-7"} />
+              </svg>
+              {isExpanded ? 'Collapse' : 'Expand'}
+            </button>
+            <button
+              onClick={downloadTemplate}
+              className="px-3 py-1.5 text-sm bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors flex items-center gap-1.5"
+            >
+              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+              </svg>
+              Download
+            </button>
+            <button
+              onClick={openAWSConsole}
+              className="px-3 py-1.5 text-sm bg-gradient-to-r from-orange-500 to-orange-600 text-white rounded-lg hover:shadow-md transition-all flex items-center gap-1.5"
+              title="Open AWS CloudFormation Console (template will be copied to clipboard)"
+            >
+              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" />
+              </svg>
+              Deploy in AWS
+            </button>
+          </div>
+        </div>
+        <div className={`bg-gray-900 rounded-lg border border-gray-700 overflow-auto ${isExpanded ? 'max-h-[calc(100vh-250px)]' : 'max-h-[600px]'}`}>
+          <pre className="text-sm text-green-400 font-mono whitespace-pre-wrap break-words p-4">
+            <code>{cleanTemplate}</code>
+          </pre>
+        </div>
+        {!isExpanded && templateLines > 50 && (
+          <div className="mt-2 text-xs text-gray-500 dark:text-gray-400 text-center">
+            Template truncated. Click "Expand" to view full template ({templateLines} lines)
+          </div>
+        )}
+      </div>
+    </div>
+  );
+};
 
 const MessageBubble: React.FC<MessageBubbleProps> = ({ message, onActionClick }) => {
   const isUser = message.type === 'user';
@@ -132,171 +281,34 @@ const MessageBubble: React.FC<MessageBubbleProps> = ({ message, onActionClick })
               </div>
               
               {/* Show CloudFormation template and buttons for generate mode */}
-              {!isUser && message.mode === 'generate' && message.context?.result?.cloudformation_template && (() => {
-                const getCleanTemplate = (template: string): string => {
-                  if (!template) return '';
-                  
-                  // Remove markdown code blocks
-                  let clean = template.replace(/```(?:yaml|yml)?\s*\n?/g, '').replace(/```\s*$/g, '').trim();
-                  
-                  // Find the actual YAML content
-                  const yamlStartPatterns = [
-                    /AWSTemplateFormatVersion/,
-                    /^Resources:/m,
-                    /^Parameters:/m,
-                    /^Outputs:/m,
-                    /^Mappings:/m,
-                    /^Conditions:/m,
-                    /^Transform:/m,
-                  ];
-                  
-                  let startIndex = -1;
-                  for (const pattern of yamlStartPatterns) {
-                    const match = clean.search(pattern);
-                    if (match !== -1) {
-                      startIndex = match;
-                      break;
-                    }
-                  }
-                  
-                  if (startIndex !== -1) {
-                    clean = clean.substring(startIndex);
-                  }
-                  
-                  // Remove any trailing explanatory text
-                  const lines = clean.split('\n');
-                  const yamlLines: string[] = [];
-                  let inYaml = false;
-                  
-                  for (const line of lines) {
-                    const trimmed = line.trim();
-                    
-                    if (!inYaml && (
-                      trimmed.startsWith('AWSTemplateFormatVersion') ||
-                      trimmed.startsWith('Resources:') ||
-                      trimmed.startsWith('Parameters:') ||
-                      trimmed.startsWith('Outputs:') ||
-                      trimmed.startsWith('Mappings:') ||
-                      trimmed.startsWith('Conditions:') ||
-                      trimmed.startsWith('Transform:') ||
-                      trimmed.startsWith('---')
-                    )) {
-                      inYaml = true;
-                    }
-                    
-                    if (inYaml) {
-                      if (trimmed && 
-                          !trimmed.startsWith('#') && 
-                          !trimmed.match(/^\s*[-!&*]/) && 
-                          !trimmed.includes(':') &&
-                          !trimmed.match(/^\s*[A-Z][a-zA-Z0-9]*:/) &&
-                          trimmed.length > 0 &&
-                          !trimmed.match(/^\s*$/)
-                      ) {
-                        if (!trimmed.toLowerCase().includes('template') && 
-                            !trimmed.toLowerCase().includes('cloudformation') &&
-                            !trimmed.toLowerCase().includes('aws')) {
-                          break;
-                        }
-                      }
-                      yamlLines.push(line);
-                    }
-                  }
-                  
-                  return yamlLines.length > 0 ? yamlLines.join('\n').trim() : clean;
-                };
+              {!isUser && message.mode === 'generate' && message.context?.result?.cloudformation_template && (
+                <CloudFormationTemplateDisplay 
+                  template={message.context.result.cloudformation_template}
+                  costEstimate={message.context.result.cost_estimate}
+                />
+              )}
 
-                const downloadTemplate = () => {
-                  const template = message.context.result.cloudformation_template;
-                  if (template) {
-                    const cleanTemplate = getCleanTemplate(template);
-                    const blob = new Blob([cleanTemplate], { type: 'text/yaml' });
-                    const url = URL.createObjectURL(blob);
-                    const a = document.createElement('a');
-                    a.href = url;
-                    a.download = 'cloudformation-template.yaml';
-                    document.body.appendChild(a);
-                    a.click();
-                    document.body.removeChild(a);
-                    URL.revokeObjectURL(url);
-                  }
-                };
-
-                const openAWSConsole = () => {
-                  const region = message.context.result.cost_estimate?.region || 'us-east-1';
-                  const cloudFormationUrl = `https://console.aws.amazon.com/cloudformation/home?region=${region}#/stacks/create`;
-                  window.open(cloudFormationUrl, '_blank');
-                  
-                  const template = message.context.result.cloudformation_template;
-                  if (template) {
-                    const cleanTemplate = getCleanTemplate(template);
-                    navigator.clipboard.writeText(cleanTemplate).then(() => {
-                      console.log('Template copied to clipboard');
-                    }).catch(err => {
-                      console.error('Failed to copy template:', err);
-                    });
-                  }
-                };
-
-                const template = message.context.result.cloudformation_template;
-                const cleanTemplate = getCleanTemplate(template);
-
-                return (
-                  <div className="mt-4 space-y-3">
-                    {/* CloudFormation Template Preview */}
-                    <div className="p-4 bg-gray-50 dark:bg-gray-700 rounded-lg">
-                      <div className="flex justify-between items-center mb-3">
-                        <h4 className="font-semibold text-gray-800 dark:text-gray-200">⚡ CloudFormation Template</h4>
-                        <div className="flex gap-2">
-                          <button
-                            onClick={downloadTemplate}
-                            className="px-3 py-1.5 text-sm bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors flex items-center gap-1.5"
-                          >
-                            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
-                            </svg>
-                            Download
-                          </button>
-                          <button
-                            onClick={openAWSConsole}
-                            className="px-3 py-1.5 text-sm bg-gradient-to-r from-orange-500 to-orange-600 text-white rounded-lg hover:shadow-md transition-all flex items-center gap-1.5"
-                            title="Open AWS CloudFormation Console (template will be copied to clipboard)"
-                          >
-                            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" />
-                            </svg>
-                            Deploy in AWS
-                          </button>
-                        </div>
-                      </div>
-                      <div className="bg-gray-900 rounded-lg p-3 overflow-auto max-h-[600px] border border-gray-700">
-                        <pre className="text-xs text-green-400 font-mono whitespace-pre-wrap break-words">
-                          <code>{cleanTemplate}</code>
-                        </pre>
+              {/* CloudFormation MCP Server Response Display - Show while streaming or when complete */}
+              {message.context?.result?.cloudformation_response && (
+                <div className="p-4 bg-blue-50 dark:bg-blue-900/20 rounded-lg border border-blue-200 dark:border-blue-800">
+                  <div className="flex items-start gap-2">
+                    <svg className="w-5 h-5 text-blue-600 dark:text-blue-400 mt-0.5 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                    </svg>
+                    <div className="flex-1">
+                      <h5 className="font-semibold text-blue-900 dark:text-blue-100 mb-2">
+                        📋 CloudFormation MCP Server Response
+                        {!message.context?.result?.cloudformation_template && (
+                          <span className="ml-2 text-xs text-blue-600 dark:text-blue-400 animate-pulse">● Streaming...</span>
+                        )}
+                      </h5>
+                      <div className="text-sm text-blue-800 dark:text-blue-200 max-h-[300px] overflow-auto bg-white dark:bg-gray-800 p-3 rounded border">
+                        {renderMarkdownWithCodeBlocks(message.context.result.cloudformation_response)}
                       </div>
                     </div>
-
-                    {/* CloudFormation MCP Server Response Display - Show while streaming or when complete */}
-                    {message.context.result?.cloudformation_response && (
-                      <div className="p-4 bg-blue-50 dark:bg-blue-900/20 rounded-lg border border-blue-200 dark:border-blue-800">
-                        <div className="flex items-start gap-2">
-                          <svg className="w-5 h-5 text-blue-600 dark:text-blue-400 mt-0.5 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
-                          </svg>
-                          <div className="flex-1">
-                            <h5 className="font-semibold text-blue-900 dark:text-blue-100 mb-2">
-                              📋 CloudFormation MCP Server Response
-                              {!message.context.result.cloudformation_template && (
-                                <span className="ml-2 text-xs text-blue-600 dark:text-blue-400 animate-pulse">● Streaming...</span>
-                              )}
-                            </h5>
-                            <div className="text-sm text-blue-800 dark:text-blue-200 max-h-[300px] overflow-auto bg-white dark:bg-gray-800 p-3 rounded border">
-                              {renderMarkdownWithCodeBlocks(message.context.result.cloudformation_response)}
-                            </div>
-                          </div>
-                        </div>
-                      </div>
-                    )}
+                  </div>
+                </div>
+              )}
 
                     {/* Architecture Diagram Display for generate mode - only show if not empty */}
                     {message.context.result.architecture_diagram && message.context.result.architecture_diagram.trim() && (() => {
