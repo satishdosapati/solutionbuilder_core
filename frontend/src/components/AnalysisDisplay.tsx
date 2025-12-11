@@ -289,7 +289,7 @@ const FollowUpQuestionsCard: React.FC<{
             {category.replace('_', ' ')}
           </h3>
           <div className="space-y-3">
-            {questionList.map((question, index) => (
+            {questionList.map((question: string, index: number) => (
               <button
                 key={index}
                 onClick={() => onQuestionClick?.(question)}

@@ -1,4 +1,4 @@
-import React, { useRef, useEffect, useState, useCallback } from 'react';
+import React, { useRef, useEffect, useCallback } from 'react';
 import { ChatMessage, ConversationContext } from '../types';
 import MessageBubble from './MessageBubble';
 import ConversationInput from './ConversationInput';
@@ -26,7 +26,7 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({
   const shouldAutoScrollRef = useRef(true);
   const isScrollingProgrammaticallyRef = useRef(false);
   const lastScrollTopRef = useRef(0);
-  const scrollTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+  const scrollTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const lastMessageCountRef = useRef(0);
 
   // Check if user is near bottom of scroll container

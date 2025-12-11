@@ -1,5 +1,5 @@
 import axios from 'axios';
-import { GenerationRequest, GenerationResponse, FollowUpRequest } from '../types';
+import { GenerationRequest, GenerationResponse } from '../types';
 
 const API_BASE_URL = '/api';
 
@@ -289,7 +289,7 @@ export const apiService = {
   },
 
   // Streaming version for generate mode
-  async generateArchitectureStream(request: GenerationRequest, onChunk: (chunk: { type: string; content?: string; cloudformation?: string; diagram?: string; cost_estimate?: any; error?: string }) => void) {
+  async generateArchitectureStream(request: GenerationRequest, onChunk: (chunk: { type: string; content?: string; cloudformation?: string; diagram?: string; cost_estimate?: any; suggestions?: string[]; error?: string }) => void) {
     try {
       console.log('Starting streaming generate request to:', `${API_BASE_URL}/stream-generate`);
       const response = await fetch('/api/stream-generate', {

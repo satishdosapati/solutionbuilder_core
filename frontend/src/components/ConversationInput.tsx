@@ -50,14 +50,6 @@ const ConversationInput: React.FC<ConversationInputProps> = ({
     }
   };
 
-  const getModeColor = () => {
-    switch (context.mode) {
-      case 'brainstorm': return 'orange';
-      case 'analyze': return 'green';
-      case 'generate': return 'blue';
-      default: return 'gray';
-    }
-  };
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();

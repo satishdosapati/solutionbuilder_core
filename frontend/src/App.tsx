@@ -4,7 +4,6 @@ import { ChatMessage, ConversationContext, ConversationState, ActionButton } fro
 import ChatInterface from './components/ChatInterface';
 import ThemeToggle from './components/ThemeToggle';
 import NebulaLogo from './components/NebulaLogo';
-import EnhancedAnalysisDisplay from './components/EnhancedAnalysisDisplay';
 
 function App() {
   console.log('App component rendering...');
@@ -628,7 +627,7 @@ function App() {
             conversationHistory: [...conversationState.context.conversationHistory, message],
             needsClarification: false,
             clarificationQuestions: [],
-            lastInteractionType: 'analyze'
+            lastInteractionType: 'analysis'
           });
         }
         

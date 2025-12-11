@@ -27,6 +27,8 @@ export interface GenerationResponse {
   mcp_servers_enabled: string[];
   analysis_summary?: any; // Add analysis summary
   follow_up_suggestions?: string[]; // Follow-up suggestions based on what wasn't generated
+  knowledge_response?: string; // Knowledge response from analyze mode
+  enhanced_analysis?: EnhancedAnalysis; // Enhanced analysis data
 }
 
 // Enhanced analysis types
