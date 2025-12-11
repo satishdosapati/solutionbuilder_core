@@ -1084,27 +1084,18 @@ async def stream_response(request: GenerationRequest, session_id: Optional[str] 
 
 @app.post("/stream-generate")
 async def stream_generate(request: GenerationRequest, session_id: Optional[str] = None):
-    """Stream generate mode responses: CloudFormation, Diagram, and Cost sequentially"""
+    """
+    Stream generate mode: Always generates CloudFormation template.
+    Returns complete template with outputs, parameters, resources, and deployment instructions.
+    Diagram and pricing are optional enhancements available via separate endpoints.
+    """
     
-    logger.info(f"Streaming generate mode for: '{request.requirements[:100]}...'")
+    logger.info(f"Streaming CloudFormation generation for: '{request.requirements[:100]}...'")
     
     async def generate_stream():
         try:
-            # Detect user intent for conditional generation
-            generate_flags = detect_generation_intent(request.requirements)
-            
-            # If existing artifacts are provided, use them instead of regenerating
-            if request.existing_cloudformation_template:
-                logger.info("Using existing CloudFormation template as context")
-                generate_flags["cloudformation"] = False  # Don't regenerate, use existing
-            if request.existing_diagram:
-                logger.info("Using existing diagram as context")
-                generate_flags["diagram"] = False  # Don't regenerate, use existing
-            if request.existing_cost_estimate:
-                logger.info("Using existing cost estimate as context")
-                generate_flags["cost"] = False  # Don't regenerate, use existing
-            
-            logger.info(f"Generation flags: CF={generate_flags['cloudformation']}, Diagram={generate_flags['diagram']}, Cost={generate_flags['cost']}")
+            # Always generate CloudFormation template (core functionality)
+            # Use only cfn-server for CloudFormation generation
             
             # Get or create session
             current_session_id = session_id
@@ -1115,13 +1106,12 @@ async def stream_generate(request: GenerationRequest, session_id: Optional[str] 
                 if not session:
                     current_session_id = session_manager.create_session()
             
-            # Get generate mode servers
-            from services.mode_server_manager import mode_server_manager
-            generate_servers = [server["name"] for server in mode_server_manager.get_servers_for_mode("generate")]
-            logger.info(f"Generate mode MCP servers: {generate_servers}")
+            # Use only CloudFormation server for initial generation
+            cfn_servers = ["cfn-server"]
+            logger.info(f"Using MCP servers for CloudFormation generation: {cfn_servers}")
             
-            # Initialize orchestrator
-            strands_orchestrator = MCPEnabledOrchestrator(generate_servers)
+            # Initialize orchestrator with CloudFormation server only
+            strands_orchestrator = MCPEnabledOrchestrator(cfn_servers)
             await strands_orchestrator.initialize()
             
             # Analyze requirements for context
@@ -1136,236 +1126,82 @@ async def stream_generate(request: GenerationRequest, session_id: Optional[str] 
                 "analysis_reasoning": analysis.reasoning
             }
             
-            # Phase 1: Generate CloudFormation template (streaming) - conditional
-            cf_content = ""
-            if generate_flags.get("cloudformation", True):
-                logger.info("Phase 1: Generating CloudFormation template...")
-                yield f"data: {json.dumps({'type': 'status', 'message': 'Generating CloudFormation template...'})}\n\n"
-                
-                try:
-                    # Get MCP client for CloudFormation generation
-                    mcp_client_wrapper = await mcp_client_manager.get_mcp_client_wrapper(generate_servers)
-                    async with mcp_client_wrapper as mcp_client:
-                        tools = mcp_client.list_tools_sync()
-                        
-                        # Create CloudFormation agent
-                        cf_agent = Agent(
-                            name="cloudformation-generator",
-                            model=strands_orchestrator.model,
-                            tools=tools,
-                            system_prompt=strands_orchestrator._get_cloudformation_prompt(),
-                            conversation_manager=strands_orchestrator.conversation_manager
-                        )
-                        
-                        # Stream CloudFormation generation
-                        cf_prompt = strands_orchestrator._create_prompt_for_agent(agent_inputs, "cloudformation")
-                        
-                        async for event in cf_agent.stream_async(cf_prompt):
-                            if "data" in event:
-                                chunk_text = event["data"]
-                                cf_content += chunk_text
-                                yield f"data: {json.dumps({'type': 'cloudformation', 'content': chunk_text})}\n\n"
-                            elif "error" in event:
-                                logger.error(f"CloudFormation streaming error: {event['error']}")
-                                yield f"data: {json.dumps({'type': 'error', 'error': event['error']})}\n\n"
-                                break
-                            elif "result" in event:
-                                result = event['result']
-                                if isinstance(result, dict):
-                                    text_content = result.get("text") or result.get("message", {}).get("text", "")
-                                    if text_content:
-                                        cf_content += text_content
-                                        yield f"data: {json.dumps({'type': 'cloudformation', 'content': text_content})}\n\n"
-                        
-                        # Parse template to extract structured information
-                        parsed_template = parse_cloudformation_template(cf_content)
-                        deployment_instructions = generate_deployment_instructions(cf_content, "us-east-1")
-                        
-                        # Send CloudFormation complete signal with full content and parsed data
-                        yield f"data: {json.dumps({
-                            'type': 'cloudformation_complete',
-                            'content': cf_content,
-                            'template_outputs': parsed_template['outputs'],
-                            'template_parameters': parsed_template['parameters'],
-                            'resources_summary': {
-                                'total_resources': parsed_template['total_resources'],
-                                'resource_types': parsed_template['resource_types'],
-                                'aws_services': parsed_template['aws_services'],
-                                'resources': parsed_template['resources'][:20]
-                            },
-                            'deployment_instructions': deployment_instructions
-                        })}\n\n"
-                except Exception as e:
-                    logger.error(f"Error generating CloudFormation template: {e}")
-                    yield f"data: {json.dumps({'type': 'error', 'error': str(e)})}\n\n"
-            else:
-                # Use existing CloudFormation template
-                cf_content = request.existing_cloudformation_template or ""
-                logger.info("Using existing CloudFormation template")
-                yield f"data: {json.dumps({'type': 'cloudformation_complete', 'content': cf_content})}\n\n"
+            # Always generate CloudFormation template (streaming)
+            logger.info("Generating CloudFormation template...")
+            yield f"data: {json.dumps({'type': 'status', 'message': 'Generating CloudFormation template...'})}\n\n"
             
-            # Get MCP client for diagram/cost generation (if needed)
-            if generate_flags.get("diagram", False) or generate_flags.get("cost", False):
-                try:
-                    mcp_client_wrapper = await mcp_client_manager.get_mcp_client_wrapper(generate_servers)
-                    async with mcp_client_wrapper as mcp_client:
-                        tools = mcp_client.list_tools_sync()
-                        
-                        # Phase 2: Generate Diagram (streaming) - conditional
-                        # Use existing CF template if provided, otherwise use generated one
-                        cf_content_for_diagram = cf_content
-                        if request.existing_cloudformation_template:
-                            cf_content_for_diagram = request.existing_cloudformation_template
-                            logger.info("Using existing CloudFormation template for diagram generation")
-                        
-                        diagram_content = ""
-                        if generate_flags.get("diagram", False):
-                            logger.info("Phase 2: Generating architecture diagram...")
-                            yield f"data: {json.dumps({'type': 'status', 'message': 'Generating architecture diagram...'})}\n\n"
-                            
-                            diagram_inputs = agent_inputs.copy()
-                            # Parse CF template and create diagram-specific summary
-                            parsed_info = strands_orchestrator._parse_cloudformation_template(cf_content_for_diagram)
-                            cf_summary = strands_orchestrator._format_cloudformation_summary(parsed_info, for_agent="diagram")
-                            diagram_inputs["cloudformation_summary"] = cf_summary
-                            diagram_inputs["cloudformation_content"] = cf_content_for_diagram[:2000]
-                            diagram_inputs["aws_services"] = parsed_info.get("aws_services", [])
-                            diagram_inputs["resource_relationships"] = parsed_info.get("relationships", [])
-                            
-                            diagram_agent = Agent(
-                                name="architecture-diagram-generator",
-                                model=strands_orchestrator.model,
-                                tools=tools,
-                                system_prompt=strands_orchestrator._get_diagram_prompt(),
-                                conversation_manager=strands_orchestrator.conversation_manager
-                            )
-                            
-                            diagram_prompt = strands_orchestrator._create_prompt_for_agent(diagram_inputs, "diagram")
-                            
-                            async for event in diagram_agent.stream_async(diagram_prompt):
-                                if "data" in event:
-                                    chunk_text = event["data"]
-                                    diagram_content += chunk_text
-                                    yield f"data: {json.dumps({'type': 'diagram', 'content': chunk_text})}\n\n"
-                                elif "error" in event:
-                                    logger.error(f"Diagram streaming error: {event['error']}")
-                                    yield f"data: {json.dumps({'type': 'error', 'error': event['error']})}\n\n"
-                                    break
-                                elif "result" in event:
-                                    result = event['result']
-                                    if isinstance(result, dict):
-                                        text_content = result.get("text") or result.get("message", {}).get("text", "")
-                                        if text_content:
-                                            diagram_content += text_content
-                                            yield f"data: {json.dumps({'type': 'diagram', 'content': text_content})}\n\n"
-                            
-                            # Extract diagram if embedded
-                            if "```" in diagram_content:
-                                import re
-                                code_match = re.search(r'```(?:\w+)?\n(.*?)\n```', diagram_content, re.DOTALL)
-                                if code_match:
-                                    diagram_content = code_match.group(1)
-                            
-                            yield f"data: {json.dumps({'type': 'diagram_complete', 'content': diagram_content})}\n\n"
-                        else:
-                            logger.info("Phase 2: Diagram generation skipped (not requested)")
-                            yield f"data: {json.dumps({'type': 'diagram_complete', 'content': ''})}\n\n"
-                        
-                        # Phase 3: Generate Cost Estimate (streaming) - conditional
-                        # Use existing artifacts if provided, otherwise use generated ones
-                        cf_content_for_cost = cf_content_for_diagram
-                        diagram_content_for_cost = diagram_content
-                        if request.existing_diagram:
-                            diagram_content_for_cost = request.existing_diagram
-                            logger.info("Using existing diagram for cost generation")
-                        
-                        if generate_flags.get("cost", False):
-                            logger.info("Phase 3: Generating cost estimate...")
-                            yield f"data: {json.dumps({'type': 'status', 'message': 'Generating cost estimate...'})}\n\n"
-                            
-                            cost_inputs = agent_inputs.copy()
-                            # Parse CF template and create cost-specific summary
-                            parsed_info = strands_orchestrator._parse_cloudformation_template(cf_content_for_cost)
-                            cf_summary = strands_orchestrator._format_cloudformation_summary(parsed_info, for_agent="cost")
-                            cost_inputs["cloudformation_summary"] = cf_summary
-                            cost_inputs["cloudformation_content"] = cf_content_for_cost[:2000]
-                            cost_inputs["parsed_resources"] = parsed_info.get("resources", {})
-                            cost_inputs["key_properties"] = parsed_info.get("key_properties", {})
-                            if diagram_content_for_cost:
-                                cost_inputs["diagram_summary"] = strands_orchestrator._summarize_output(diagram_content_for_cost, "diagram")
-                            
-                            cost_agent = Agent(
-                                name="cost-estimation",
-                                model=strands_orchestrator.model,
-                                tools=tools,
-                                system_prompt=strands_orchestrator._get_cost_prompt(),
-                                conversation_manager=strands_orchestrator.conversation_manager
-                            )
-                            
-                            cost_prompt = strands_orchestrator._create_prompt_for_agent(cost_inputs, "cost")
-                            cost_content = ""
-                            
-                            async for event in cost_agent.stream_async(cost_prompt):
-                                if "data" in event:
-                                    chunk_text = event["data"]
-                                    cost_content += chunk_text
-                                    yield f"data: {json.dumps({'type': 'cost', 'content': chunk_text})}\n\n"
-                                elif "error" in event:
-                                    logger.error(f"Cost streaming error: {event['error']}")
-                                    yield f"data: {json.dumps({'type': 'error', 'error': event['error']})}\n\n"
-                                    break
-                                elif "result" in event:
-                                    result = event['result']
-                                    if isinstance(result, dict):
-                                        text_content = result.get("text") or result.get("message", {}).get("text", "")
-                                        if text_content:
-                                            cost_content += text_content
-                                            yield f"data: {json.dumps({'type': 'cost', 'content': text_content})}\n\n"
-                            
-                            # Parse cost estimate
-                            cost_estimate = {
-                                "monthly_cost": "$500-1000",
-                                "breakdown": cost_content[:500] if cost_content else "Error generating cost estimate"
-                            }
-                            
-                            # Try to extract structured cost data
-                            import re
-                            monthly_match = re.search(r'\$[\d,]+(?:-\$[\d,]+)?', cost_content)
-                            if monthly_match:
-                                cost_estimate["monthly_cost"] = monthly_match.group(0)
-                            
-                            yield f"data: {json.dumps({'type': 'cost_complete', 'cost_estimate': cost_estimate})}\n\n"
-                        else:
-                            logger.info("Phase 3: Cost generation skipped (not requested)")
-                            cost_estimate = {
-                                "monthly_cost": None,
-                                "message": "Cost estimate not generated. Ask for pricing details if needed."
-                            }
-                            yield f"data: {json.dumps({'type': 'cost_complete', 'cost_estimate': cost_estimate})}\n\n"
-                        
-                        # Send follow-up suggestions
-                        follow_up_suggestions = []
-                        if not generate_flags.get("diagram", False):
-                            follow_up_suggestions.append("Show me the architecture diagram")
-                        if not generate_flags.get("cost", False):
-                            follow_up_suggestions.append("What's the estimated cost?")
-                        if follow_up_suggestions:
-                            yield f"data: {json.dumps({'type': 'follow_up_suggestions', 'suggestions': follow_up_suggestions})}\n\n"
+            cf_content = ""
+            try:
+                # Get MCP client for CloudFormation generation
+                mcp_client_wrapper = await mcp_client_manager.get_mcp_client_wrapper(cfn_servers)
+                async with mcp_client_wrapper as mcp_client:
+                    tools = mcp_client.list_tools_sync()
+                    
+                    # Create CloudFormation agent
+                    cf_agent = Agent(
+                        name="cloudformation-generator",
+                        model=strands_orchestrator.model,
+                        tools=tools,
+                        system_prompt=strands_orchestrator._get_cloudformation_prompt(),
+                        conversation_manager=strands_orchestrator.conversation_manager
+                    )
+                    
+                    # Stream CloudFormation generation
+                    cf_prompt = strands_orchestrator._create_prompt_for_agent(agent_inputs, "cloudformation")
+                    
+                    async for event in cf_agent.stream_async(cf_prompt):
+                        if "data" in event:
+                            chunk_text = event["data"]
+                            cf_content += chunk_text
+                            yield f"data: {json.dumps({'type': 'cloudformation', 'content': chunk_text})}\n\n"
+                        elif "error" in event:
+                            logger.error(f"CloudFormation streaming error: {event['error']}")
+                            yield f"data: {json.dumps({'type': 'error', 'error': event['error']})}\n\n"
+                            break
+                        elif "result" in event:
+                            result = event['result']
+                            if isinstance(result, dict):
+                                text_content = result.get("text") or result.get("message", {}).get("text", "")
+                                if text_content:
+                                    cf_content += text_content
+                                    yield f"data: {json.dumps({'type': 'cloudformation', 'content': text_content})}\n\n"
+                    
+                    # Parse template to extract structured information
+                    parsed_template = parse_cloudformation_template(cf_content)
+                    deployment_instructions = generate_deployment_instructions(cf_content, "us-east-1")
+                    
+                    # Send CloudFormation complete signal with full content and parsed data
+                    yield f"data: {json.dumps({
+                        'type': 'cloudformation_complete',
+                        'content': cf_content,
+                        'template_outputs': parsed_template.get('outputs', []),
+                        'template_parameters': parsed_template.get('parameters', []),
+                        'resources_summary': {
+                            'total_resources': parsed_template.get('total_resources', 0),
+                            'resource_types': parsed_template.get('resource_types', {}),
+                            'aws_services': parsed_template.get('aws_services', []),
+                            'resources': parsed_template.get('resources', [])[:20]
+                        },
+                        'deployment_instructions': deployment_instructions
+                    })}\n\n"
                     
                     # Release MCP client
                     await mcp_client_manager.release_mcp_client()
-                except Exception as e:
-                    logger.error(f"Error in diagram/cost generation: {e}")
-                    yield f"data: {json.dumps({'type': 'error', 'error': str(e)})}\n\n"
-            else:
-                # No diagram or cost needed, just send follow-up suggestions
-                follow_up_suggestions = []
-                if not generate_flags.get("diagram", False):
-                    follow_up_suggestions.append("Show me the architecture diagram")
-                if not generate_flags.get("cost", False):
-                    follow_up_suggestions.append("What's the estimated cost?")
-                if follow_up_suggestions:
-                    yield f"data: {json.dumps({'type': 'follow_up_suggestions', 'suggestions': follow_up_suggestions})}\n\n"
+            except Exception as e:
+                logger.error(f"Error generating CloudFormation template: {e}")
+                yield f"data: {json.dumps({'type': 'error', 'error': str(e)})}\n\n"
+            
+            # Always send suggestions for diagram and pricing (optional enhancements)
+            follow_up_suggestions = [
+                "Generate architecture diagram",
+                "Estimate costs for this architecture"
+            ]
+            yield f"data: {json.dumps({'type': 'follow_up_suggestions', 'suggestions': follow_up_suggestions})}\n\n"
+            
+            # Note: Diagram and cost generation are now handled by separate endpoints:
+            # - /generate/diagram - generates diagram on-demand
+            # - /generate/pricing - generates cost estimate on-demand
+            # Users trigger these via buttons in the UI
             
             # Send completion signal
             yield f"data: {json.dumps({
