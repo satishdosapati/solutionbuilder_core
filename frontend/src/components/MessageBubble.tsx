@@ -159,51 +159,65 @@ const CloudFormationTemplateDisplay: React.FC<{ template: string; costEstimate?:
 const MessageBubble: React.FC<MessageBubbleProps> = ({ message, onActionClick }) => {
   const isUser = message.type === 'user';
   
-  // Function to render markdown code blocks (```yaml ... ```)
+  // Function to render markdown code blocks with ChatGPT-style features
   const renderMarkdownWithCodeBlocks = (text: string) => {
     if (!text) return null;
     
-    // Pattern to match ```yaml ... ``` code blocks (non-greedy to match first closing ```)
-    const codeBlockPattern = /```yaml\s*\n([\s\S]*?)```/g;
-    const parts: Array<{ type: 'text' | 'code'; content: string }> = [];
-    let lastIndex = 0;
+    // Pattern to match code blocks: ```language ... ``` (supports all languages)
+    const codeBlockPattern = /```(\w+)?\s*\n([\s\S]*?)```/g;
+    
+    const parts: Array<{ 
+      type: 'text' | 'code' | 'inline-code'; 
+      content: string; 
+      language?: string;
+    }> = [];
+    
     let match;
     
+    // First, find all code blocks
+    const codeBlocks: Array<{ start: number; end: number; language: string; content: string }> = [];
     while ((match = codeBlockPattern.exec(text)) !== null) {
-      // Add text before the code block
-      if (match.index > lastIndex) {
-        const beforeText = text.substring(lastIndex, match.index);
+      codeBlocks.push({
+        start: match.index,
+        end: match.index + match[0].length,
+        language: match[1] || '',
+        content: match[2].trim()
+      });
+    }
+    
+    // Process text and code blocks
+    let currentIndex = 0;
+    codeBlocks.forEach((block) => {
+      // Add text before code block
+      if (block.start > currentIndex) {
+        const beforeText = text.substring(currentIndex, block.start);
         if (beforeText.trim()) {
-          parts.push({
-            type: 'text',
-            content: beforeText
-          });
+          // Process inline code in text
+          processInlineCode(beforeText, parts);
         }
       }
       
-      // Add the code block
+      // Add code block
       parts.push({
         type: 'code',
-        content: match[1].trim() // The content inside the code block
+        content: block.content,
+        language: block.language
       });
       
-      lastIndex = match.index + match[0].length;
-    }
+      currentIndex = block.end;
+    });
     
-    // Add remaining text after the last code block
-    if (lastIndex < text.length) {
-      const remainingText = text.substring(lastIndex);
+    // Add remaining text after last code block
+    if (currentIndex < text.length) {
+      const remainingText = text.substring(currentIndex);
       if (remainingText.trim()) {
-        parts.push({
-          type: 'text',
-          content: remainingText
-        });
+        processInlineCode(remainingText, parts);
       }
     }
     
-    // If no code blocks found, return the original text as plain text
+    // If no code blocks found, process entire text for inline code
     if (parts.length === 0) {
-      return <span className="whitespace-pre-wrap break-words">{text}</span>;
+      processInlineCode(text, parts);
     }
     
     // Render parts
@@ -212,13 +226,20 @@ const MessageBubble: React.FC<MessageBubbleProps> = ({ message, onActionClick })
         {parts.map((part, index) => {
           if (part.type === 'code') {
             return (
-              <div key={index} className="my-3">
-                <div className="bg-gray-900 rounded-lg p-3 overflow-auto max-h-[400px] border border-gray-700">
-                  <pre className="text-xs text-green-400 font-mono whitespace-pre-wrap break-words">
-                    <code>{part.content}</code>
-                  </pre>
-                </div>
-              </div>
+              <CodeBlock 
+                key={index} 
+                code={part.content} 
+                language={part.language || ''} 
+              />
+            );
+          } else if (part.type === 'inline-code') {
+            return (
+              <code 
+                key={index}
+                className="bg-gray-100 dark:bg-gray-800 px-1.5 py-0.5 rounded text-sm font-mono text-gray-800 dark:text-gray-200 border border-gray-300 dark:border-gray-600"
+              >
+                {part.content}
+              </code>
             );
           } else {
             return (
@@ -229,6 +250,137 @@ const MessageBubble: React.FC<MessageBubbleProps> = ({ message, onActionClick })
           }
         })}
       </>
+    );
+  };
+  
+  // Helper function to process inline code in text
+  const processInlineCode = (text: string, parts: Array<{ type: 'text' | 'code' | 'inline-code'; content: string; language?: string }>) => {
+    const inlineCodePattern = /`([^`\n]+)`/g;
+    let lastIndex = 0;
+    let match;
+    let hasInlineCode = false;
+    
+    while ((match = inlineCodePattern.exec(text)) !== null) {
+      hasInlineCode = true;
+      // Add text before inline code
+      if (match.index > lastIndex) {
+        const beforeText = text.substring(lastIndex, match.index);
+        if (beforeText) {
+          parts.push({
+            type: 'text',
+            content: beforeText
+          });
+        }
+      }
+      
+      // Add inline code
+      parts.push({
+        type: 'inline-code',
+        content: match[1]
+      });
+      
+      lastIndex = match.index + match[0].length;
+    }
+    
+    // Add remaining text
+    if (lastIndex < text.length) {
+      const remainingText = text.substring(lastIndex);
+      if (remainingText) {
+        parts.push({
+          type: 'text',
+          content: remainingText
+        });
+      }
+    }
+    
+    // If no inline code found, add entire text as regular text
+    if (!hasInlineCode && text) {
+      parts.push({
+        type: 'text',
+        content: text
+      });
+    }
+  };
+  
+  // CodeBlock component with ChatGPT-style features
+  const CodeBlock: React.FC<{ code: string; language: string }> = ({ code, language }) => {
+    const [copied, setCopied] = useState(false);
+    
+    const handleCopy = async () => {
+      try {
+        await navigator.clipboard.writeText(code);
+        setCopied(true);
+        setTimeout(() => setCopied(false), 2000);
+      } catch (err) {
+        console.error('Failed to copy code:', err);
+      }
+    };
+    
+    // Language display name
+    const languageDisplay = language || 'text';
+    const languageColors: Record<string, string> = {
+      'python': 'text-yellow-400',
+      'javascript': 'text-yellow-300',
+      'typescript': 'text-blue-400',
+      'java': 'text-red-400',
+      'yaml': 'text-green-400',
+      'yml': 'text-green-400',
+      'json': 'text-green-300',
+      'bash': 'text-gray-300',
+      'shell': 'text-gray-300',
+      'sh': 'text-gray-300',
+      'html': 'text-orange-400',
+      'css': 'text-blue-300',
+      'sql': 'text-blue-300',
+      'go': 'text-cyan-400',
+      'rust': 'text-orange-500',
+      'cpp': 'text-blue-500',
+      'c': 'text-blue-500',
+    };
+    
+    const languageColor = languageColors[language.toLowerCase()] || 'text-gray-400';
+    
+    return (
+      <div className="my-4 group">
+        {/* Header with language label and copy button */}
+        <div className="flex items-center justify-between bg-gray-800 dark:bg-gray-900 px-4 py-2 rounded-t-lg border-b border-gray-700">
+          <div className="flex items-center gap-2">
+            {language && (
+              <span className={`text-xs font-medium ${languageColor} uppercase`}>
+                {languageDisplay}
+              </span>
+            )}
+          </div>
+          <button
+            onClick={handleCopy}
+            className="flex items-center gap-1.5 px-2 py-1 text-xs text-gray-400 hover:text-gray-200 transition-colors rounded hover:bg-gray-700"
+            title="Copy code"
+          >
+            {copied ? (
+              <>
+                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                </svg>
+                <span>Copied!</span>
+              </>
+            ) : (
+              <>
+                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z" />
+                </svg>
+                <span>Copy</span>
+              </>
+            )}
+          </button>
+        </div>
+        
+        {/* Code content */}
+        <div className="bg-gray-900 dark:bg-black rounded-b-lg overflow-auto max-h-[600px] border border-gray-700 border-t-0">
+          <pre className="p-4 text-sm font-mono text-gray-100 leading-relaxed">
+            <code className="whitespace-pre break-words">{code}</code>
+          </pre>
+        </div>
+      </div>
     );
   };
   
