@@ -310,8 +310,8 @@ const MessageBubble: React.FC<MessageBubbleProps> = ({ message, onActionClick })
                 </div>
               )}
 
-                    {/* Architecture Diagram Display for generate mode - only show if not empty */}
-                    {message.context.result.architecture_diagram && message.context.result.architecture_diagram.trim() && (() => {
+              {/* Architecture Diagram Display for generate mode - only show if not empty */}
+              {message.context?.result?.architecture_diagram && message.context.result.architecture_diagram.trim() && (() => {
                       const diagramContent = message.context.result.architecture_diagram.trim();
                       const isUrl = diagramContent.startsWith('/api/diagrams/') || diagramContent.startsWith('http');
                       
@@ -421,7 +421,7 @@ const MessageBubble: React.FC<MessageBubbleProps> = ({ message, onActionClick })
                             })()}
                           </div>
                           {/* Architecture Explanation */}
-                          {message.context.result.architecture_explanation && (
+                          {message.context?.result?.architecture_explanation && (
                             <div className="mt-4 p-4 bg-blue-50 dark:bg-blue-900/20 rounded-lg border border-blue-200 dark:border-blue-800">
                               <h5 className="font-semibold text-gray-800 dark:text-gray-200 mb-2">📋 Architecture Explanation</h5>
                               <div className="text-sm text-gray-700 dark:text-gray-300 whitespace-pre-wrap">
@@ -433,54 +433,51 @@ const MessageBubble: React.FC<MessageBubbleProps> = ({ message, onActionClick })
                       );
                     })()}
 
-                    {/* Cost Estimate Display - only show if cost was generated */}
-                    {message.context.result.cost_estimate && message.context.result.cost_estimate.monthly_cost && (
-                      <div className="p-3 bg-gradient-to-r from-green-50 to-blue-50 dark:from-green-900 dark:to-blue-900 rounded-lg">
-                        <div className="flex justify-between items-center">
-                          <div>
-                            <p className="text-sm font-medium text-gray-800 dark:text-gray-200">💰 Estimated Monthly Cost</p>
-                            <p className="text-xs text-gray-600 dark:text-gray-400">
-                              Region: {message.context.result.cost_estimate.region || 'us-east-1'}
-                            </p>
-                          </div>
-                          <p className="text-2xl font-bold text-green-600 dark:text-green-400">
-                            {message.context.result.cost_estimate.monthly_cost}
-                          </p>
-                        </div>
-                      </div>
-                    )}
-                    
-                    {/* Follow-up Suggestions */}
-                    {message.context.result.follow_up_suggestions && message.context.result.follow_up_suggestions.length > 0 && (
-                      <div className="mt-4 p-4 bg-purple-50 dark:bg-purple-900/20 rounded-lg border border-purple-200 dark:border-purple-800">
-                        <h5 className="font-semibold text-purple-900 dark:text-purple-100 mb-3 flex items-center gap-2">
-                          <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343 5.657l-.707-.707m2.828-9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 11-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z" />
-                          </svg>
-                          💡 You might also want to:
-                        </h5>
-                        <div className="space-y-2">
-                          {message.context.result.follow_up_suggestions.map((suggestion, idx) => (
-                            <button
-                              key={idx}
-                              onClick={() => {
-                                if (onActionClick) {
-                                  onActionClick(suggestion);
-                                }
-                              }}
-                              className="w-full text-left px-3 py-2 text-sm text-purple-800 dark:text-purple-200 bg-white dark:bg-gray-800 rounded-lg border border-purple-200 dark:border-purple-700 hover:bg-purple-100 dark:hover:bg-purple-900/30 transition-colors flex items-center gap-2 cursor-pointer"
-                            >
-                              <span className="text-purple-600 dark:text-purple-400">→</span>
-                              {suggestion}
-                            </button>
-                          ))}
-                        </div>
-                      </div>
-                    )}
+              {/* Cost Estimate Display - only show if cost was generated */}
+              {message.context?.result?.cost_estimate && message.context.result.cost_estimate.monthly_cost && (
+                <div className="p-3 bg-gradient-to-r from-green-50 to-blue-50 dark:from-green-900 dark:to-blue-900 rounded-lg">
+                  <div className="flex justify-between items-center">
+                    <div>
+                      <p className="text-sm font-medium text-gray-800 dark:text-gray-200">💰 Estimated Monthly Cost</p>
+                      <p className="text-xs text-gray-600 dark:text-gray-400">
+                        Region: {message.context.result.cost_estimate.region || 'us-east-1'}
+                      </p>
+                    </div>
+                    <p className="text-2xl font-bold text-green-600 dark:text-green-400">
+                      {message.context.result.cost_estimate.monthly_cost}
+                    </p>
                   </div>
-                );
-              })()}
+                </div>
+              )}
               
+              {/* Follow-up Suggestions */}
+              {message.context?.result?.follow_up_suggestions && message.context.result.follow_up_suggestions.length > 0 && (
+                <div className="mt-4 p-4 bg-purple-50 dark:bg-purple-900/20 rounded-lg border border-purple-200 dark:border-purple-800">
+                  <h5 className="font-semibold text-purple-900 dark:text-purple-100 mb-3 flex items-center gap-2">
+                    <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343 5.657l-.707-.707m2.828-9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 11-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z" />
+                    </svg>
+                    💡 You might also want to:
+                  </h5>
+                  <div className="space-y-2">
+                    {message.context.result.follow_up_suggestions.map((suggestion: string, idx: number) => (
+                      <button
+                        key={idx}
+                        onClick={() => {
+                          if (onActionClick) {
+                            onActionClick(suggestion);
+                          }
+                        }}
+                        className="w-full text-left px-3 py-2 text-sm text-purple-800 dark:text-purple-200 bg-white dark:bg-gray-800 rounded-lg border border-purple-200 dark:border-purple-700 hover:bg-purple-100 dark:hover:bg-purple-900/30 transition-colors flex items-center gap-2 cursor-pointer"
+                      >
+                        <span className="text-purple-600 dark:text-purple-400">→</span>
+                        {suggestion}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              )}
+
               {/* Show architecture diagram for analyze mode */}
               {!isUser && message.mode === 'analyze' && message.context?.result?.architecture_diagram && (() => {
                 console.log('Rendering diagram:', {
@@ -492,15 +489,14 @@ const MessageBubble: React.FC<MessageBubbleProps> = ({ message, onActionClick })
                 });
                 
                 const downloadDiagram = () => {
-                  const diagramContent = message.context.result.architecture_diagram;
+                  const diagramContent = message.context?.result?.architecture_diagram;
+                  if (!diagramContent) return;
                   let blob: Blob;
                   let filename: string;
-                  let mimeType: string;
 
                   if (diagramContent.startsWith('<svg')) {
-                    blob = new Blob([diagramContent], { type: 'image/svg+xml' });
+                      blob = new Blob([diagramContent], { type: 'image/svg+xml' });
                     filename = 'architecture-diagram.svg';
-                    mimeType = 'image/svg+xml';
                   } else if (diagramContent.startsWith('data:image')) {
                     const base64Match = diagramContent.match(/^data:image\/(\w+);base64,(.+)$/);
                     if (base64Match) {
@@ -514,7 +510,6 @@ const MessageBubble: React.FC<MessageBubbleProps> = ({ message, onActionClick })
                       const byteArray = new Uint8Array(byteNumbers);
                       blob = new Blob([byteArray], { type: `image/${type}` });
                       filename = `architecture-diagram.${type}`;
-                      mimeType = `image/${type}`;
                     } else {
                       return;
                     }
@@ -547,11 +542,10 @@ const MessageBubble: React.FC<MessageBubbleProps> = ({ message, onActionClick })
                     <div className="border border-gray-200 dark:border-gray-600 rounded-lg p-4 bg-white dark:bg-gray-800">
                       <div className="flex justify-center items-center min-h-[300px]">
                         {(() => {
-                          const diagramContent = message.context.result.architecture_diagram.trim();
+                          const diagramContent = message.context?.result?.architecture_diagram?.trim() || '';
                           const isSVG = diagramContent.toLowerCase().startsWith('<svg');
                           const isBase64Image = diagramContent.toLowerCase().startsWith('data:image');
                           const isPNG = diagramContent.toLowerCase().includes('data:image/png');
-                          const isSVGData = diagramContent.toLowerCase().includes('data:image/svg');
                           
                           if (isSVG) {
                             // Raw SVG content
