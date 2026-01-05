@@ -1,4 +1,6 @@
 import React, { useState } from 'react';
+import { motion } from 'framer-motion';
+import { Brain, Search, Zap, Send, Loader } from 'lucide-react';
 import { ConversationContext } from '../types';
 
 interface ConversationInputProps {
@@ -43,12 +45,14 @@ const ConversationInput: React.FC<ConversationInputProps> = ({
 
   const getModeIcon = () => {
     switch (context.mode) {
-      case 'brainstorm': return '🧠';
-      case 'analyze': return '🔍';
-      case 'generate': return '⚡';
-      default: return '💬';
+      case 'brainstorm': return Brain;
+      case 'analyze': return Search;
+      case 'generate': return Zap;
+      default: return Send;
     }
   };
+  
+  const ModeIcon = getModeIcon();
 
 
   const handleSubmit = (e: React.FormEvent) => {
@@ -106,30 +110,38 @@ const ConversationInput: React.FC<ConversationInputProps> = ({
               />
             </div>
           </div>
-          <button
+          <motion.button
             type="submit"
             disabled={!input.trim() || isLoading}
+            whileHover={!input.trim() || isLoading ? {} : { scale: 1.05 }}
+            whileTap={!input.trim() || isLoading ? {} : { scale: 0.95 }}
             className={`
               px-5 py-3 rounded-xl text-sm font-semibold
               transition-all duration-300 shadow-soft
               ${!input.trim() || isLoading
                 ? 'bg-gray-200 dark:bg-gray-700 text-gray-400 dark:text-gray-500 cursor-not-allowed'
-                : `bg-gradient-to-r ${getModeGradient()} text-white hover:shadow-medium hover:scale-105`
+                : `bg-gradient-to-r ${getModeGradient()} text-white hover:shadow-medium`
               }
             `}
+            aria-label="Send message"
           >
             {isLoading ? (
               <div className="flex items-center gap-2">
-                <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
+                <motion.div
+                  animate={{ rotate: 360 }}
+                  transition={{ duration: 1, repeat: Infinity, ease: "linear" }}
+                >
+                  <Loader className="w-4 h-4" />
+                </motion.div>
                 <span>Sending</span>
               </div>
             ) : (
               <div className="flex items-center gap-2">
-                <span className="text-base">{getModeIcon()}</span>
+                <ModeIcon className="w-4 h-4" />
                 <span>Send</span>
               </div>
             )}
-          </button>
+          </motion.button>
         </div>
         
         {/* Subtle Help Text */}

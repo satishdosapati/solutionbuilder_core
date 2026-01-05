@@ -1,4 +1,14 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
+import { motion } from 'framer-motion';
+import { Copy, Check, Brain, Search, Zap } from 'lucide-react';
+import Prism from 'prismjs';
+import 'prismjs/themes/prism-tomorrow.css';
+import 'prismjs/components/prism-yaml';
+import 'prismjs/components/prism-json';
+import 'prismjs/components/prism-bash';
+import 'prismjs/components/prism-python';
+import 'prismjs/components/prism-javascript';
+import 'prismjs/components/prism-typescript';
 import { ChatMessage } from '../types';
 import EnhancedAnalysisDisplay from './EnhancedAnalysisDisplay';
 import GenerateOutputDisplay from './GenerateOutputDisplay';
@@ -303,9 +313,31 @@ const MessageBubble: React.FC<MessageBubbleProps> = ({ message, onActionClick })
     }
   };
   
-  // CodeBlock component with ChatGPT-style features
+  // CodeBlock component with Prism.js syntax highlighting
   const CodeBlock: React.FC<{ code: string; language: string }> = ({ code, language }) => {
     const [copied, setCopied] = useState(false);
+    const codeRef = useRef<HTMLElement>(null);
+    
+    // Normalize language name for Prism.js
+    const normalizeLanguage = (lang: string): string => {
+      const langMap: Record<string, string> = {
+        'yml': 'yaml',
+        'js': 'javascript',
+        'ts': 'typescript',
+        'py': 'python',
+        'sh': 'bash',
+        'shell': 'bash',
+      };
+      return langMap[lang.toLowerCase()] || lang.toLowerCase();
+    };
+    
+    const prismLanguage = normalizeLanguage(language || 'text');
+    
+    useEffect(() => {
+      if (codeRef.current && Prism.languages[prismLanguage]) {
+        Prism.highlightElement(codeRef.current);
+      }
+    }, [code, prismLanguage]);
     
     const handleCopy = async () => {
       try {
@@ -352,33 +384,37 @@ const MessageBubble: React.FC<MessageBubbleProps> = ({ message, onActionClick })
               </span>
             )}
           </div>
-          <button
+          <motion.button
             onClick={handleCopy}
+            whileHover={{ scale: 1.05 }}
+            whileTap={{ scale: 0.95 }}
             className="flex items-center gap-1.5 px-2 py-1 text-xs text-gray-400 hover:text-gray-200 transition-colors rounded hover:bg-gray-700"
             title="Copy code"
+            aria-label="Copy code to clipboard"
           >
             {copied ? (
               <>
-                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
-                </svg>
+                <Check className="w-4 h-4" />
                 <span>Copied!</span>
               </>
             ) : (
               <>
-                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z" />
-                </svg>
+                <Copy className="w-4 h-4" />
                 <span>Copy</span>
               </>
             )}
-          </button>
+          </motion.button>
         </div>
         
-        {/* Code content */}
+        {/* Code content with Prism.js highlighting */}
         <div className="bg-gray-900 dark:bg-black rounded-b-lg overflow-auto max-h-[600px] border border-gray-700 border-t-0">
-          <pre className="p-4 text-sm font-mono text-gray-100 leading-relaxed">
-            <code className="whitespace-pre break-words">{code}</code>
+          <pre className="p-4 text-sm font-mono leading-relaxed">
+            <code 
+              ref={codeRef}
+              className={`language-${prismLanguage} whitespace-pre break-words`}
+            >
+              {code}
+            </code>
           </pre>
         </div>
       </div>
@@ -387,10 +423,10 @@ const MessageBubble: React.FC<MessageBubbleProps> = ({ message, onActionClick })
   
   const getModeIcon = (mode?: string) => {
     switch (mode) {
-      case 'brainstorm': return '🧠';
-      case 'analyze': return '🔍';
-      case 'generate': return '⚡';
-      default: return '';
+      case 'brainstorm': return Brain;
+      case 'analyze': return Search;
+      case 'generate': return Zap;
+      default: return null;
     }
   };
 
@@ -408,11 +444,15 @@ const MessageBubble: React.FC<MessageBubbleProps> = ({ message, onActionClick })
       <div className={`w-full max-w-full ${isUser ? 'order-2' : 'order-1'}`}>
         {/* Message Header */}
         <div className={`flex items-center gap-2 mb-1.5 ${isUser ? 'justify-end' : 'justify-start'}`}>
-          {!isUser && message.mode && (
-            <span className={`text-xs px-2.5 py-1 rounded-full font-medium ${getModeColorClasses(message.mode)}`}>
-              {getModeIcon(message.mode)} {message.mode}
-            </span>
-          )}
+          {!isUser && message.mode && (() => {
+            const ModeIcon = getModeIcon(message.mode);
+            return ModeIcon ? (
+              <span className={`text-xs px-2.5 py-1 rounded-full font-medium flex items-center gap-1.5 ${getModeColorClasses(message.mode)}`}>
+                <ModeIcon className="w-3 h-3" />
+                <span>{message.mode}</span>
+              </span>
+            ) : null;
+          })()}
           <span className="text-xs text-gray-400 dark:text-gray-600">
             {message.timestamp.toLocaleTimeString()}
           </span>

@@ -1,4 +1,6 @@
 import React, { useRef, useEffect, useCallback } from 'react';
+import { motion, AnimatePresence } from 'framer-motion';
+import { Brain, Search, Zap } from 'lucide-react';
 import { ChatMessage, ConversationContext } from '../types';
 import MessageBubble from './MessageBubble';
 import ConversationInput from './ConversationInput';
@@ -167,17 +169,32 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({
       >
         {messages.length === 0 ? (
           <div className="flex items-center justify-center h-full">
-            <div className="max-w-md animate-fade-in">
+            <motion.div
+              initial={{ opacity: 0, scale: 0.9 }}
+              animate={{ opacity: 1, scale: 1 }}
+              transition={{ duration: 0.4 }}
+              className="max-w-md"
+            >
               <div className={`
                 feature-card p-8 text-center
                 ${context.mode === 'brainstorm' ? 'bg-gradient-to-br from-pink-50 to-rose-50 dark:from-pink-950/20 dark:to-rose-950/20' : 
                   context.mode === 'analyze' ? 'bg-gradient-to-br from-blue-50 to-cyan-50 dark:from-blue-950/20 dark:to-cyan-950/20' : 
                   'bg-gradient-to-br from-emerald-50 to-teal-50 dark:from-emerald-950/20 dark:to-teal-950/20'}
               `}>
-                <div className="text-5xl mb-4">
-                  {context.mode === 'brainstorm' ? '🧠' : 
-                   context.mode === 'analyze' ? '🔍' : '⚡'}
-                </div>
+                <motion.div
+                  initial={{ scale: 0 }}
+                  animate={{ scale: 1 }}
+                  transition={{ delay: 0.2, type: "spring", stiffness: 200 }}
+                  className="flex justify-center mb-4"
+                >
+                  {context.mode === 'brainstorm' ? (
+                    <Brain className="w-16 h-16 text-pink-500" />
+                  ) : context.mode === 'analyze' ? (
+                    <Search className="w-16 h-16 text-blue-500" />
+                  ) : (
+                    <Zap className="w-16 h-16 text-emerald-500" />
+                  )}
+                </motion.div>
                 <h3 className="text-xl font-semibold text-gray-900 dark:text-white mb-2">
                   {context.mode === 'brainstorm' ? 'AWS Knowledge & Brainstorming' :
                    context.mode === 'analyze' ? 'Requirements Analysis' :
@@ -189,26 +206,42 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({
                    'Generate complete CloudFormation templates, diagrams, and cost estimates.'}
                 </p>
               </div>
-            </div>
+            </motion.div>
           </div>
         ) : (
           <div className="space-y-4 w-full">
-            {messages.map((message) => (
-              <MessageBubble
-                key={message.id}
-                message={message}
-                onActionClick={onActionClick}
-              />
-            ))}
+            <AnimatePresence initial={false}>
+              {messages.map((message, index) => (
+                <motion.div
+                  key={message.id}
+                  initial={{ opacity: 0, y: 20 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  exit={{ opacity: 0, x: -20 }}
+                  transition={{ 
+                    duration: 0.3,
+                    delay: index === messages.length - 1 ? 0 : 0.05
+                  }}
+                >
+                  <MessageBubble
+                    message={message}
+                    onActionClick={onActionClick}
+                  />
+                </motion.div>
+              ))}
+            </AnimatePresence>
             {isLoading && (
-              <div className="flex justify-start animate-fade-in">
+              <motion.div
+                initial={{ opacity: 0, y: 10 }}
+                animate={{ opacity: 1, y: 0 }}
+                className="flex justify-start"
+              >
                 <div className="bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl px-4 py-3 shadow-soft">
                   <div className="flex items-center space-x-2">
                     <div className="w-4 h-4 border-2 border-blue-600 border-t-transparent rounded-full animate-spin"></div>
                     <span className="text-sm text-gray-600 dark:text-gray-400">Thinking...</span>
                   </div>
                 </div>
-              </div>
+              </motion.div>
             )}
             <div ref={messagesEndRef} data-messages-end />
           </div>
