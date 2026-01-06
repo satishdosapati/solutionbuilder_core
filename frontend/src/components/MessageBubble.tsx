@@ -592,8 +592,8 @@ const MessageBubble: React.FC<MessageBubbleProps> = ({ message, onActionClick })
                 </>
               )}
 
-              {/* CloudFormation MCP Server Response Display - Show while streaming or when complete */}
-              {message.context?.result?.cloudformation_response && (
+              {/* CloudFormation MCP Server Response Display - Show ONLY while streaming */}
+              {message.context?.result?.cloudformation_response && !message.context?.result?.cloudformation_template && (
                 <div className="p-4 bg-blue-50 dark:bg-blue-900/20 rounded-lg border border-blue-200 dark:border-blue-800">
                   <div className="flex items-start gap-2">
                     <svg className="w-5 h-5 text-blue-600 dark:text-blue-400 mt-0.5 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -602,23 +602,13 @@ const MessageBubble: React.FC<MessageBubbleProps> = ({ message, onActionClick })
                     <div className="flex-1">
                       <h5 className="font-semibold text-blue-900 dark:text-blue-100 mb-2">
                         📋 CloudFormation MCP Server Response
-                        {!message.context?.result?.cloudformation_template && (
-                          <span className="ml-2 text-xs text-blue-600 dark:text-blue-400 animate-pulse">● Streaming...</span>
-                        )}
+                        <span className="ml-2 text-xs text-blue-600 dark:text-blue-400 animate-pulse">● Streaming...</span>
                       </h5>
                       <div className="text-sm text-blue-800 dark:text-blue-200 max-h-[300px] overflow-auto bg-white dark:bg-gray-800 p-3 rounded border">
-                        {(() => {
-                          const isStreaming = !message.context?.result?.cloudformation_template;
-                          console.log('[MessageBubble] Rendering cloudformation_response:', {
-                            isStreaming,
-                            hasTemplate: !!message.context?.result?.cloudformation_template,
-                            responseLength: message.context.result.cloudformation_response?.length || 0
-                          });
-                          return renderMarkdownWithCodeBlocks(
-                            message.context.result.cloudformation_response,
-                            isStreaming
-                          );
-                        })()}
+                        {renderMarkdownWithCodeBlocks(
+                          message.context.result.cloudformation_response,
+                          true // Always streaming when this section is shown
+                        )}
                       </div>
                     </div>
                   </div>

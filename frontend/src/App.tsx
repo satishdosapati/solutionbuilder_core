@@ -688,9 +688,9 @@ function App() {
                     const updatedMessages = [...prev.messages];
                     const lastMessage = updatedMessages[updatedMessages.length - 1];
                     if (lastMessage && lastMessage.type === 'assistant') {
-                      // Update message content with streaming CloudFormation response
-                      lastMessage.content = `Generating CloudFormation template...\n\n${cloudformationContent}`;
-                      // Store streaming response in context
+                      // Update message content with simple status (don't include full content)
+                      lastMessage.content = 'Generating CloudFormation template...';
+                      // Store streaming response in context (not in message.content)
                       if (!lastMessage.context) lastMessage.context = {};
                       if (!lastMessage.context.result) lastMessage.context.result = {};
                       lastMessage.context.result.cloudformation_response = cloudformationContent;
