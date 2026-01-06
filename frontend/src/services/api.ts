@@ -374,7 +374,6 @@ export const apiService = {
                     type: 'cloudformation_complete', 
                     cloudformation: completeContent,
                     content: completeContent,
-                    content_length: completeContent.length,
                     template_outputs: data.template_outputs,
                     template_parameters: data.template_parameters,
                     resources_summary: data.resources_summary,
