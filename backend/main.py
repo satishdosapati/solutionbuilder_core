@@ -235,18 +235,32 @@ async def get_diagram_stats_endpoint():
         raise HTTPException(status_code=500, detail=str(e))
 
 @app.post("/brainstorm")
-async def brainstorm_aws_knowledge(request: GenerationRequest):
+async def brainstorm_aws_knowledge(request: GenerationRequest, session_id: Optional[str] = None):
     """Access AWS knowledge for brainstorming and exploration"""
     
     logger.info(f"Starting AWS knowledge brainstorming for: '{request.requirements[:100]}...'")
     
     try:
+        # Get or create session
+        if not session_id:
+            session_id = session_manager.create_session()
+            logger.info(f"Created new session for brainstorm: {session_id}")
+        else:
+            session = session_manager.get_session(session_id)
+            if not session:
+                session_id = session_manager.create_session()
+                logger.info(f"Session not found, created new session: {session_id}")
+        
         # For brainstorming, we only need AWS knowledge server
         mcp_servers = ["aws-knowledge-server"]
         logger.info("Using AWS Knowledge MCP server for brainstorming")
         
+        # Get conversation manager from session (if exists)
+        conversation_manager = session_manager.get_conversation_manager(session_id)
+        
         # Create a dedicated knowledge agent instead of full orchestrator
         knowledge_agent = MCPKnowledgeAgent("aws-knowledge", mcp_servers)
+        await knowledge_agent.initialize(conversation_manager=conversation_manager)
         
         # Create concise brainstorming-specific prompt with follow-up generation
         brainstorming_prompt = f"""Answer this AWS question directly and concisely:
@@ -275,6 +289,9 @@ Follow-up questions:
         logger.info("Executing AWS knowledge brainstorming...")
         result = await knowledge_agent.execute(agent_inputs)
         
+        # Store conversation manager back in session
+        session_manager.set_conversation_manager(session_id, knowledge_agent.conversation_manager)
+        
         # Extract knowledge response and follow-up questions
         knowledge_content = result.get("content", "No information available")
         follow_up_questions = result.get("follow_up_questions", [])
@@ -289,6 +306,7 @@ Follow-up questions:
             "response_type": "educational",
             "success": result.get("success", True),
             "follow_up_questions": follow_up_questions,
+            "session_id": session_id,
             "suggestions": [
                 "Click on any follow-up question to continue the conversation",
                 "Ask about specific implementation details",
@@ -727,10 +745,14 @@ async def stream_response(request: GenerationRequest, session_id: Optional[str] 
             
             # Use knowledge server for streaming responses
             mcp_servers = ["aws-knowledge-server"]
+            
+            # Get conversation manager from session (if exists)
+            conversation_manager = session_manager.get_conversation_manager(current_session_id)
+            
             knowledge_agent = MCPKnowledgeAgent("aws-knowledge", mcp_servers)
             
-            # Ensure agent is initialized
-            await knowledge_agent.initialize()
+            # Initialize agent with existing conversation manager
+            await knowledge_agent.initialize(conversation_manager=conversation_manager)
             
             # Create streaming prompt with follow-up questions
             streaming_prompt = f"""
@@ -794,6 +816,10 @@ async def stream_response(request: GenerationRequest, session_id: Optional[str] 
                             # Send follow-up questions
                             yield f"data: {json.dumps({'follow_up_questions': follow_up_questions})}\n\n"
                     logger.info("Streaming completed by agent")
+                    
+                    # Store conversation manager back in session
+                    session_manager.set_conversation_manager(current_session_id, knowledge_agent.conversation_manager)
+                    
                     break
                 elif "current_tool_use" in event:
                     # Log tool usage for debugging
@@ -841,9 +867,12 @@ async def stream_generate(request: GenerationRequest, session_id: Optional[str] 
             cfn_servers = ["cfn-server"]
             logger.info(f"Using MCP servers for CloudFormation generation: {cfn_servers}")
             
+            # Get conversation manager from session (if exists)
+            conversation_manager = session_manager.get_conversation_manager(current_session_id)
+            
             # Initialize orchestrator with CloudFormation server only
             strands_orchestrator = MCPEnabledOrchestrator(cfn_servers)
-            await strands_orchestrator.initialize()
+            await strands_orchestrator.initialize(conversation_manager=conversation_manager)
             
             # Analyze requirements for context
             intent_orchestrator = IntentBasedMCPOrchestrator()
@@ -854,7 +883,8 @@ async def stream_generate(request: GenerationRequest, session_id: Optional[str] 
                 "detected_keywords": analysis.detected_keywords,
                 "detected_intents": analysis.detected_intents,
                 "complexity_level": analysis.complexity_level,
-                "analysis_reasoning": analysis.reasoning
+                "analysis_reasoning": analysis.reasoning,
+                "existing_cloudformation_template": request.existing_cloudformation_template
             }
             
             # Always generate CloudFormation template (streaming)
@@ -906,6 +936,9 @@ async def stream_generate(request: GenerationRequest, session_id: Optional[str] 
                     
                     # Log complete content length for verification
                     logger.info(f"✅ Complete CloudFormation template streamed: {len(cf_content)} characters")
+                    
+                    # Store conversation manager back in session
+                    session_manager.set_conversation_manager(current_session_id, strands_orchestrator.conversation_manager)
                     
                     # Parse template to extract structured information
                     parsed_template = parse_cloudformation_template(cf_content)

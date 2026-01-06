@@ -1561,16 +1561,22 @@ class MCPEnabledOrchestrator:
         
         raise Exception("No valid model provider available. Please configure AWS credentials.")
     
-    async def initialize(self):
+    async def initialize(self, conversation_manager=None):
         """Initialize the orchestrator with direct MCP server capabilities"""
         try:
             # Get model provider
             self.model = self._get_default_model()
             
-            # Configure conversation management
-            self.conversation_manager = SlidingWindowConversationManager(
-                window_size=10
-            )
+            # Use provided conversation manager or create new one
+            if conversation_manager:
+                self.conversation_manager = conversation_manager
+                logger.info("Using provided conversation manager")
+            else:
+                # Configure conversation management
+                self.conversation_manager = SlidingWindowConversationManager(
+                    window_size=10
+                )
+                logger.info("Created new conversation manager")
             
             logger.info(f"MCP-enabled orchestrator initialized successfully with direct servers")
             
@@ -1781,9 +1787,23 @@ class MCPEnabledOrchestrator:
         """
         
         if agent_type == "cloudformation":
+            existing_template = inputs.get("existing_cloudformation_template", "")
+            existing_template_context = ""
+            
+            if existing_template:
+                existing_template_context = f"""
+            
+EXISTING CLOUDFORMATION TEMPLATE (for reference/modification):
+{existing_template}
+
+IMPORTANT: The user is asking for changes/modifications to the above template.
+Please update the template based on their new requirements while maintaining
+the existing architecture where appropriate.
+"""
+            
             return f"""Generate a comprehensive CloudFormation template based on the following requirements:
             
-            {base_context}
+            {base_context}{existing_template_context}
             
             Please generate a complete CloudFormation template that includes:
             1. All necessary AWS resources for the requirements
@@ -2316,16 +2336,22 @@ class MCPKnowledgeAgent:
         )
     
     
-    async def initialize(self):
+    async def initialize(self, conversation_manager=None):
         """Initialize the agent with MCP Server capabilities"""
         try:
             # Get model provider
             self.model = self._get_default_model()
             
-            # Configure conversation management
-            self.conversation_manager = SlidingWindowConversationManager(
-                window_size=10
-            )
+            # Use provided conversation manager or create new one
+            if conversation_manager:
+                self.conversation_manager = conversation_manager
+                logger.info("Using provided conversation manager")
+            else:
+                # Configure conversation management
+                self.conversation_manager = SlidingWindowConversationManager(
+                    window_size=10
+                )
+                logger.info("Created new conversation manager")
             
             logger.info(f"MCP Knowledge Agent initialized successfully")
 

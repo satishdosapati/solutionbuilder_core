@@ -186,6 +186,22 @@ class SessionManager:
             return None
         
         return session.get("last_analysis")
+    
+    def get_conversation_manager(self, session_id: str):
+        """Get conversation manager from session"""
+        session = self.get_session(session_id)
+        if not session:
+            return None
+        return session.get("conversation_manager")
+    
+    def set_conversation_manager(self, session_id: str, conversation_manager) -> bool:
+        """Store conversation manager in session"""
+        if session_id not in self.sessions:
+            return False
+        self.sessions[session_id]["conversation_manager"] = conversation_manager
+        self.sessions[session_id]["last_accessed"] = datetime.now()
+        logger.debug(f"Stored conversation manager for session {session_id}")
+        return True
 
 # Global session manager instance
 session_manager = SessionManager()
