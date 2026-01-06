@@ -24,16 +24,6 @@
           "command": "uvx",
           "args": ["fastmcp", "run", "https://knowledge-mcp.global.api.aws"]
         }
-      },
-      {
-        "name": "aws-diagram-server",
-        "type": "stdio",
-        "command": "awslabs.aws-diagram-mcp-server",
-        "args": [],
-        "fallback": {
-          "command": "uvx",
-          "args": ["--from", "awslabs.aws-diagram-mcp-server@latest", "awslabs.aws-diagram-mcp-server"]
-        }
       }
     ]
   },
@@ -47,26 +37,6 @@
         "fallback": {
           "command": "uvx",
           "args": ["--from", "awslabs.cfn-mcp-server@latest", "awslabs.cfn-mcp-server"]
-        }
-      },
-      {
-        "name": "aws-diagram-server",
-        "type": "stdio",
-        "command": "awslabs.aws-diagram-mcp-server",
-        "args": [],
-        "fallback": {
-          "command": "uvx",
-          "args": ["--from", "awslabs.aws-diagram-mcp-server@latest", "awslabs.aws-diagram-mcp-server"]
-        }
-      },
-      {
-        "name": "aws-pricing-server",
-        "type": "stdio",
-        "command": "awslabs.aws-pricing-mcp-server",
-        "args": [],
-        "fallback": {
-          "command": "uvx",
-          "args": ["--from", "awslabs.aws-pricing-mcp-server@latest", "awslabs.aws-pricing-mcp-server"]
         }
       }
     ]

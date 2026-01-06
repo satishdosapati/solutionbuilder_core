@@ -293,8 +293,6 @@ export const apiService = {
     type: string; 
     content?: string; 
     cloudformation?: string; 
-    diagram?: string; 
-    cost_estimate?: any; 
     suggestions?: string[]; 
     error?: string;
     template_outputs?: any[];
@@ -311,9 +309,7 @@ export const apiService = {
         },
         body: JSON.stringify({
           requirements: request.requirements,
-          existing_cloudformation_template: request.existing_cloudformation_template,
-          existing_diagram: request.existing_diagram,
-          existing_cost_estimate: request.existing_cost_estimate
+          existing_cloudformation_template: request.existing_cloudformation_template
         })
       });
 
@@ -330,8 +326,6 @@ export const apiService = {
       const decoder = new TextDecoder();
       let buffer = '';
       let cloudformationContent = '';
-      let diagramContent = '';
-      let costEstimate: any = null;
       let finalResult: any = null;
 
       try {
@@ -372,25 +366,14 @@ export const apiService = {
                     resources_summary: data.resources_summary,
                     deployment_instructions: data.deployment_instructions
                   });
-                } else if (data.type === 'diagram' && data.content) {
-                  diagramContent += data.content;
-                  onChunk({ type: 'diagram', content: data.content });
-                } else if (data.type === 'diagram_complete' && data.content) {
-                  diagramContent = data.content;
-                  onChunk({ type: 'diagram_complete', diagram: data.content });
-                } else if (data.type === 'cost' && data.content) {
-                  onChunk({ type: 'cost', content: data.content });
-                } else if (data.type === 'cost_complete' && data.cost_estimate) {
-                  costEstimate = data.cost_estimate;
-                  onChunk({ type: 'cost_complete', cost_estimate: data.cost_estimate });
                 } else if (data.type === 'follow_up_suggestions' && data.suggestions) {
                   onChunk({ type: 'follow_up_suggestions', suggestions: data.suggestions });
                 } else if (data.type === 'done') {
                   console.log('Streaming generate done signal received');
                   finalResult = {
                     cloudformation_template: cloudformationContent,
-                    architecture_diagram: diagramContent,
-                    cost_estimate: costEstimate || { monthly_cost: '$500-1000' },
+                    architecture_diagram: '',
+                    cost_estimate: { monthly_cost: null, message: 'Cost estimate not available in generate mode.' },
                     success: true
                   };
                   return finalResult;
@@ -416,8 +399,8 @@ export const apiService = {
 
       return {
         cloudformation_template: cloudformationContent,
-        architecture_diagram: diagramContent,
-        cost_estimate: costEstimate || { monthly_cost: '$500-1000' },
+        architecture_diagram: '',
+        cost_estimate: { monthly_cost: null, message: 'Cost estimate not available in generate mode.' },
         success: true
       };
     } catch (error) {
@@ -436,17 +419,6 @@ export const apiService = {
     return response.data;
   },
 
-  async generateDiagram(originalQuestion: string, cloudformationTemplate: string) {
-    const response = await api.post('/generate/diagram', {
-      original_question: originalQuestion,
-      cloudformation_template: cloudformationTemplate
-    });
-    return response.data;
-  },
-
-  async generatePricing(originalQuestion: string, cloudformationTemplate: string) {
-    const response = await api.post('/generate/pricing', {
-      original_question: originalQuestion,
       cloudformation_template: cloudformationTemplate
     });
     return response.data;

@@ -7,10 +7,10 @@
 - **Three Intelligent Modes**:
   - 🧠 **Brainstorm Mode**: Explore AWS services and best practices with AI-powered insights
   - 🔍 **Analyze Mode**: Get comprehensive analysis and intelligent recommendations for your requirements
-  - ⚡ **Generate Mode**: Generate deploy-ready CloudFormation templates, architecture diagrams, and cost estimates
+  - ⚡ **Generate Mode**: Generate deploy-ready CloudFormation templates
 - **Real Strands Agents Integration**: Uses actual Strands Agents SDK with MCP tool integration
 - **Mode-Based MCP Orchestration**: Automatically selects and configures MCP servers based on selected mode
-- **Production-Ready Outputs**: Real CloudFormation templates, architecture diagrams, and cost estimates
+- **Production-Ready Outputs**: Real CloudFormation templates
 - **Intent-Based Analysis**: Intelligent requirements analysis with keyword and intent detection
 
 ## 🏗️ Architecture
@@ -76,9 +76,6 @@ For production deployment on Amazon Linux 3 EC2 instances:
 # Quick setup using automated script
 cd backend
 bash setup_amazon_linux3.sh
-
-# Or follow detailed guide
-# See: docs/AMAZON_LINUX_3_SETUP.md
 ```
 
 **Key Requirements:**
@@ -90,11 +87,9 @@ bash setup_amazon_linux3.sh
 
 **Production Deployment:**
 
-- Use systemd services for automatic startup (see setup guide)
+- Use systemd services for automatic startup
 - Configure firewall rules for ports 8000 (backend) and 5000 (frontend)
 - Set up reverse proxy (nginx/Apache) for HTTPS in production
-
-For complete setup instructions, see [Amazon Linux 3 Setup Guide](docs/AMAZON_LINUX_3_SETUP.md).
 
 ## 🔧 Configuration
 
@@ -104,7 +99,7 @@ For complete setup instructions, see [Amazon Linux 3 Setup Guide](docs/AMAZON_LI
    - Required: AWS_ACCESS_KEY_ID, AWS_SECRET_ACCESS_KEY, AWS_REGION
    - Optional: ANTHROPIC_API_KEY (fallback if Bedrock unavailable), BEDROCK_MODEL_ID
 3. **MCP Servers**: Automatically configured based on selected mode (see `backend/config/mode_servers.json`)
-4. **Performance**: MCP servers are pre-installed locally for faster startup (see `backend/MCP_PERFORMANCE_IMPROVEMENTS.md`)
+4. **Performance**: MCP servers are pre-installed locally for faster startup using `uv tool install`
 
 ### Replit-Specific Notes (Optional)
 
@@ -114,7 +109,8 @@ For complete setup instructions, see [Amazon Linux 3 Setup Guide](docs/AMAZON_LI
 
 ## 📚 Documentation
 
-- **Setup Guide**: [SETUP.md](SETUP.md) - Detailed installation and configuration
+- **Product Tracker**: See `docs/product_tracker.md` for change history
+- **Prompt Tracker**: See `prompts/prompt_tracker.md` for prompt evolution
 - **Strands Agents**: <https://strandsagents.com/1.x/>
 - **Core MCP Server**: <https://awslabs.github.io/mcp/servers/core-mcp-server>
 
@@ -123,7 +119,7 @@ For complete setup instructions, see [Amazon Linux 3 Setup Guide](docs/AMAZON_LI
 1. **Select Mode**: Choose from Brainstorm, Analyze, or Generate mode
 2. **MCP Orchestration**: System automatically selects and configures relevant MCP servers based on mode
 3. **Agent Execution**: Strands Agents generate outputs using real AWS data and documentation
-4. **Export Results**: Download CloudFormation templates, diagrams, and cost estimates
+4. **Export Results**: Download CloudFormation templates
 
 ## 📡 API Endpoints
 
@@ -131,7 +127,7 @@ For complete setup instructions, see [Amazon Linux 3 Setup Guide](docs/AMAZON_LI
 
 - `POST /brainstorm` - AWS knowledge access for brainstorming
 - `POST /analyze-requirements` - Enhanced requirements analysis
-- `POST /generate` - Generate CloudFormation templates, diagrams, and cost estimates
+- `POST /generate` - Generate CloudFormation templates
 - `POST /follow-up` - Handle follow-up questions with context
 - `GET /health` - Health check endpoint
 
@@ -140,3 +136,7 @@ For complete setup instructions, see [Amazon Linux 3 Setup Guide](docs/AMAZON_LI
 - `POST /stream-response` - Stream brainstorm responses
 - `POST /stream-analyze` - Stream analyze responses
 - `POST /stream-generate` - Stream generate responses
+
+**Additional Endpoints:**
+
+- `GET /mcp-pool-stats` - MCP connection pool statistics

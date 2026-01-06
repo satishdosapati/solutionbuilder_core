@@ -1,6 +1,6 @@
 # Backend - Nebula.AI AWS Solution Architect Tool
 
-FastAPI + Python implementation providing mode-based MCP server orchestration, Strands agents integration, and REST API endpoints for CloudFormation template generation, architecture diagrams, and cost estimation services.
+FastAPI + Python implementation providing mode-based MCP server orchestration, Strands agents integration, and REST API endpoints for CloudFormation template generation.
 
 ## ⚠️ Python Version Compatibility
 
@@ -60,15 +60,18 @@ uvicorn main:app --host 0.0.0.0 --port 8000 --no-reload
 **Mode Endpoints:**
 - `POST /brainstorm` - AWS knowledge access for brainstorming mode
 - `POST /analyze-requirements` - Enhanced requirements analysis for analyze mode
-- `POST /generate` - Generate CloudFormation templates, diagrams, and cost estimates for generate mode
+- `POST /generate` - Generate CloudFormation templates for generate mode
 - `POST /follow-up` - Handle follow-up questions with conversation context
 
 **Streaming Endpoints:**
 - `POST /stream-response` - Stream brainstorm responses
 - `POST /stream-analyze` - Stream analyze responses
+- `POST /stream-generate` - Stream generate responses
 
-**Monitoring:**
+
+**Monitoring & Stats:**
 - `GET /metrics` - Application metrics
+- `GET /mcp-pool-stats` - MCP connection pool statistics
 
 ## 🐛 Troubleshooting
 

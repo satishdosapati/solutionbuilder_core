@@ -148,7 +148,7 @@ class CloudFormationAgent(SimpleStrandsAgent):
         """
 
 class ArchitectureDiagramAgent(SimpleStrandsAgent):
-    """Agent for generating architecture diagrams using AWS Diagram MCP Server following a structured 5-step process"""
+    """Agent for generating architecture diagrams (deprecated - diagram server removed)"""
     
     async def initialize(self):
         """Initialize the agent with basic configuration (MCP tools will be added during execution)"""
@@ -753,7 +753,7 @@ with Diagram("AWS Architecture", show=False):
   
   <text x="{width//2}" y="30" class="title">AWS Architecture</text>
   <text x="{width//2}" y="55" class="subtitle">Region: us-east-1 | Environment: production</text>
-  <text x="{width//2}" y="75" class="subtitle">Generated with AWS Diagram MCP Server</text>
+  <text x="{width//2}" y="75" class="subtitle">Architecture Diagram</text>
 '''
         
         # Generate architecture layout
@@ -1522,7 +1522,7 @@ class SimpleStrandsOrchestrator:
         return results
 
 class MCPEnabledOrchestrator:
-    """MCP-enabled orchestrator for CloudFormation, Diagram, and Cost agents using direct MCP servers"""
+    """MCP-enabled orchestrator for CloudFormation generation using direct MCP servers"""
     
     def __init__(self, mcp_servers: List[str]):
         self.mcp_servers = mcp_servers
@@ -1580,32 +1580,20 @@ class MCPEnabledOrchestrator:
     
     async def execute_all(self, inputs: Dict[str, Any], generate_flags: Optional[Dict[str, bool]] = None) -> Dict[str, Any]:
         """
-        Execute all agents with conditional generation based on flags.
+        Execute CloudFormation generation only.
         
         Args:
             inputs: Agent inputs dictionary
-            generate_flags: Dict with keys "cloudformation", "diagram", "cost" and bool values
-                           If None, defaults to generating all (backward compatible)
+            generate_flags: Dict with "cloudformation" key (ignored, always generates CloudFormation)
         """
         if not self.model:
             await self.initialize()
-        
-        # Default: generate all if flags not provided (backward compatible)
-        if generate_flags is None:
-            generate_flags = {
-                "cloudformation": True,
-                "diagram": True,
-                "cost": True
-            }
-        
-        # Ensure CloudFormation is always generated (needed for context)
-        generate_flags["cloudformation"] = True
         
         try:
             # Get MCP client wrapper from singleton manager
             mcp_client_wrapper = await mcp_client_manager.get_mcp_client_wrapper(self.mcp_servers)
             
-            # Execute agents sequentially within the MCP context manager
+            # Execute CloudFormation agent within the MCP context manager
             async with mcp_client_wrapper as mcp_client:
                 # Get tools from MCP server
                 tools = mcp_client.list_tools_sync()
@@ -1622,104 +1610,18 @@ class MCPEnabledOrchestrator:
                 
                 results = {}
                 
-                # Step 1: Execute CloudFormation Agent (always)
-                if generate_flags.get("cloudformation", True):
-                    logger.info("Step 1: Executing CloudFormation agent...")
-                    cf_agent = Agent(
-                        name="cloudformation-generator",
-                        model=self.model,
-                        tools=tools,
-                        system_prompt=self._get_cloudformation_prompt(),
-                        conversation_manager=self.conversation_manager
-                    )
-                    cf_result = await self._execute_agent(cf_agent, inputs, "cloudformation")
-                    results["cloudformation"] = cf_result
-                    logger.info(f"CloudFormation agent completed: {len(cf_result.get('content', ''))} characters")
-                else:
-                    logger.warning("CloudFormation generation skipped (should not happen)")
-                    results["cloudformation"] = {"content": "", "success": False, "skipped": True}
-                
-                # Step 2: Generate Diagram (conditional)
-                # Use existing CF template if provided, otherwise use generated one
-                cf_content_for_diagram = ""
-                if inputs.get("existing_cloudformation_template"):
-                    cf_content_for_diagram = inputs["existing_cloudformation_template"]
-                    logger.info("Using existing CloudFormation template for diagram generation")
-                elif results.get("cloudformation", {}).get("success"):
-                    cf_content_for_diagram = results["cloudformation"].get("content", "")
-                
-                if generate_flags.get("diagram", False) and cf_content_for_diagram:
-                    # Parse CF template and create diagram-specific summary
-                    parsed_info = self._parse_cloudformation_template(cf_content_for_diagram)
-                    cf_summary = self._format_cloudformation_summary(parsed_info, for_agent="diagram")
-                    logger.info(f"Step 2: CloudFormation summary ({len(cf_summary)} chars) -> Executing Diagram agent...")
-                    
-                    diagram_inputs = inputs.copy()
-                    diagram_inputs["cloudformation_summary"] = cf_summary
-                    diagram_inputs["cloudformation_content"] = cf_content_for_diagram[:2000]
-                    # Also pass parsed info for better diagram generation
-                    diagram_inputs["aws_services"] = parsed_info.get("aws_services", [])
-                    diagram_inputs["resource_relationships"] = parsed_info.get("relationships", [])
-                    
-                    diagram_agent = Agent(
-                        name="architecture-diagram-generator",
-                        model=self.model,
-                        tools=tools,
-                        system_prompt=self._get_diagram_prompt(),
-                        conversation_manager=self.conversation_manager
-                    )
-                    diagram_result = await self._execute_agent(diagram_agent, diagram_inputs, "diagram")
-                    results["diagram"] = diagram_result
-                    logger.info(f"Diagram agent completed: {len(diagram_result.get('content', ''))} characters")
-                else:
-                    logger.info("Diagram generation skipped (not requested)")
-                    results["diagram"] = {"content": "", "success": False, "skipped": True}
-                
-                # Step 3: Generate Cost Estimate (conditional)
-                # Use existing artifacts if provided, otherwise use generated ones
-                cf_content_for_cost = ""
-                if inputs.get("existing_cloudformation_template"):
-                    cf_content_for_cost = inputs["existing_cloudformation_template"]
-                elif results.get("cloudformation", {}).get("success"):
-                    cf_content_for_cost = results["cloudformation"].get("content", "")
-                
-                diagram_content_for_cost = ""
-                if inputs.get("existing_diagram"):
-                    diagram_content_for_cost = inputs["existing_diagram"]
-                elif results.get("diagram", {}).get("success"):
-                    diagram_content_for_cost = results["diagram"].get("content", "")
-                
-                if generate_flags.get("cost", False):
-                    logger.info("Step 3: Executing Cost agent...")
-                    
-                    cost_inputs = inputs.copy()
-                    if cf_content_for_cost:
-                        # Parse CF template and create cost-specific summary
-                        parsed_info = self._parse_cloudformation_template(cf_content_for_cost)
-                        cf_summary = self._format_cloudformation_summary(parsed_info, for_agent="cost")
-                        cost_inputs["cloudformation_summary"] = cf_summary
-                        cost_inputs["cloudformation_content"] = cf_content_for_cost[:2000]
-                        # Also pass parsed info for better cost estimation
-                        cost_inputs["parsed_resources"] = parsed_info.get("resources", {})
-                        cost_inputs["key_properties"] = parsed_info.get("key_properties", {})
-                    
-                    if diagram_content_for_cost:
-                        diagram_summary = self._summarize_output(diagram_content_for_cost, "diagram")
-                        cost_inputs["diagram_summary"] = diagram_summary
-                    
-                    cost_agent = Agent(
-                        name="cost-estimation",
-                        model=self.model,
-                        tools=tools,
-                        system_prompt=self._get_cost_prompt(),
-                        conversation_manager=self.conversation_manager
-                    )
-                    cost_result = await self._execute_agent(cost_agent, cost_inputs, "cost")
-                    results["cost"] = cost_result
-                    logger.info(f"Cost agent completed: {len(cost_result.get('content', ''))} characters")
-                else:
-                    logger.info("Cost generation skipped (not requested)")
-                    results["cost"] = {"content": "", "success": False, "skipped": True}
+                # Execute CloudFormation Agent (only step)
+                logger.info("Executing CloudFormation agent...")
+                cf_agent = Agent(
+                    name="cloudformation-generator",
+                    model=self.model,
+                    tools=tools,
+                    system_prompt=self._get_cloudformation_prompt(),
+                    conversation_manager=self.conversation_manager
+                )
+                cf_result = await self._execute_agent(cf_agent, inputs, "cloudformation")
+                results["cloudformation"] = cf_result
+                logger.info(f"CloudFormation agent completed: {len(cf_result.get('content', ''))} characters")
             
             # Release the MCP client usage
             await mcp_client_manager.release_mcp_client()
@@ -1729,9 +1631,7 @@ class MCPEnabledOrchestrator:
         except Exception as e:
             logger.error(f"MCP-enabled orchestrator execution failed: {e}")
             return {
-                "cloudformation": {"error": str(e), "success": False},
-                "diagram": {"error": str(e), "success": False},
-                "cost": {"error": str(e), "success": False}
+                "cloudformation": {"error": str(e), "success": False}
             }
     
     def _extract_cloudformation_template(self, content: str) -> str:
@@ -1919,7 +1819,7 @@ Use this structured information to create an accurate architecture diagram that 
 
 {base_context}{cf_context}
 
-IMPORTANT: Use the AWS Diagram MCP Server tools to create the diagram. Follow these EXACT steps:
+IMPORTANT: Diagram generation is not available. Focus on CloudFormation template generation.
 1. FIRST: Call 'get_diagram_examples' tool to see the exact format and examples
 2. Review the examples CAREFULLY - they show code WITHOUT import statements
 3. THEN: Call 'generate_diagram' tool with Python code matching the examples EXACTLY
@@ -2436,19 +2336,10 @@ class MCPKnowledgeAgent:
     
     def _get_system_prompt(self) -> str:
         """Get system prompt based on available MCP servers"""
-        has_diagram_server = "aws-diagram-server" in self.mcp_servers
-        has_pricing_server = "aws-pricing-server" in self.mcp_servers
-        
         base_prompt = """You are an AWS Solution Architect with comprehensive access to AWS Knowledge MCP Server capabilities through direct MCP connections.
 
         You have access to:
-        - AWS Knowledge MCP Server: Latest AWS documentation, blog posts, best practices, and official resources"""
-        
-        if has_diagram_server:
-            base_prompt += """
-        - AWS Diagram MCP Server: Tools to generate architecture diagrams showing AWS services and their relationships"""
-        
-        base_prompt += """
+        - AWS Knowledge MCP Server: Latest AWS documentation, blog posts, best practices, and official resources
         - AWS API Server: Current AWS API information and service capabilities
         
         Your role is to provide comprehensive, accurate, and up-to-date information about:
@@ -2458,78 +2349,11 @@ class MCPKnowledgeAgent:
         - Architectural decisions and trade-offs
         - AWS pricing models and cost optimization strategies
         - Security considerations and compliance requirements
-        - Latest AWS blog posts and announcements"""
+        - Latest AWS blog posts and announcements
         
-        if has_diagram_server:
-            base_prompt += """
-        
-        CRITICAL INSTRUCTIONS FOR DIAGRAM GENERATION:
-        ONLY generate diagrams when the user EXPLICITLY requests them (e.g., "show me a diagram", "create a diagram", "generate architecture diagram").
-        When asked to generate diagrams, you MUST follow this exact process:
-        
-        STEP 1: Call 'get_diagram_examples' tool FIRST to see the exact format and examples
-        STEP 2: Review the examples carefully to understand the required code structure
-        STEP 3: Call 'generate_diagram' tool with Python code matching the examples exactly
-        
-        According to AWS Diagram MCP Server documentation and testing, the generate_diagram tool:
-        - Expects Python code using the diagrams library
-        - The code parameter should contain ONLY the Python code (no markdown, no explanations)
-        - The tool executes the code in a sandboxed environment with diagrams library PRE-IMPORTED
-        - The tool generates PNG files (not SVG) - the response will contain image data
-        
-        CRITICAL REQUIREMENTS:
-        - You MUST call get_diagram_examples FIRST to see the exact format
-        - Based on examples: DO NOT include import statements - the diagrams library is pre-imported
-        - The examples show code WITHOUT imports like: `with Diagram("Name", show=False):`
-        - Do NOT include ANY imports (no "from diagrams import Diagram", etc.)
-        - Do NOT include any comments or explanations in the code
-        - Do NOT wrap the code in markdown code blocks when calling the tool
-        - The code must be a clean Python string matching the examples exactly
-        - Use show=False in Diagram() constructor
-        - Use >> operator for connections between services
-        - The tool returns PNG image data, not SVG
-        
-        WORKFLOW:
-        1. Call get_diagram_examples tool FIRST to see example formats
-        2. Review the examples CAREFULLY to understand:
-           - Whether imports are included or not
-           - The exact code structure and format
-           - How services are imported and used
-        3. Summarize the architecture requirements to extract key AWS services
-        4. Identify the BEST single architecture pattern (not multiple options)
-        5. Write Python code following the EXACT format from the examples (including whether imports are present or not)
-        6. Call generate_diagram with ONLY the Python code string (no markdown, no comments, no explanations)
-        
-        DO:
-        - ALWAYS call get_diagram_examples first - this is MANDATORY
-        - Match the EXACT format shown in the examples (including import statements if examples show them)
-        - If examples show imports like "from diagrams import Diagram", include them
-        - If examples show imports like "from diagrams.aws.compute import Lambda", include them
-        - If examples DO NOT show imports, do not include them (library may be pre-imported)
-        - Pass clean Python code string to generate_diagram tool
-        - Include all services from the architecture summary
-        - Show all connections between services using >> operator
-        
-        DO NOT:
-        - Skip calling get_diagram_examples - this will cause errors
-        - Include imports if the examples do not show them
-        - Omit imports if the examples show them
-        - Include markdown formatting (triple backticks + python) in tool call
-        - Add comments, explanations, or docstrings in the code
-        - Generate multiple architecture options (choose ONE best)
-        - Use any Python standard library imports
-        - Include any code that is not directly related to diagram generation
-        - Guess the format - always check examples first"""
-        
-        if not has_diagram_server:
-            base_prompt += """
-        
-        IMPORTANT: You do NOT have access to diagram generation tools. DO NOT attempt to generate diagrams.
-        Focus exclusively on knowledge sharing, guidance, and conceptual understanding."""
-        else:
-            base_prompt += """
-        
-        For knowledge sharing mode, DO NOT generate CloudFormation templates, diagrams, or cost estimates unless explicitly requested.
+        IMPORTANT: You do NOT have access to diagram generation or pricing tools.
+        Focus exclusively on knowledge sharing, guidance, and conceptual understanding.
+        DO NOT generate CloudFormation templates, diagrams, or cost estimates unless explicitly requested.
         Focus exclusively on knowledge sharing, guidance, and conceptual understanding."""
         
         base_prompt += """

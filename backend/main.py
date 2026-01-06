@@ -21,7 +21,7 @@ import re
 from datetime import datetime
 from dotenv import load_dotenv
 from services.intent_based_mcp_orchestrator import IntentBasedMCPOrchestrator
-from services.strands_agents_simple import MCPKnowledgeAgent, MCPEnabledOrchestrator, ArchitectureDiagramAgent
+from services.strands_agents_simple import MCPKnowledgeAgent, MCPEnabledOrchestrator
 from services.cloudformation_parser import parse_cloudformation_template, generate_deployment_instructions
 from strands import Agent
 from services.session_manager import session_manager
@@ -335,22 +335,13 @@ async def analyze_requirements(
         question_type = classify_question(request.requirements)
         logger.info(f"Question classified as: {question_type['type']} (confidence: {question_type['confidence']})")
         
-        # Detect if user wants diagram
-        wants_diagram = detect_diagram_intent(request.requirements)
-        logger.info(f"Diagram intent detected: {wants_diagram}")
-        
-        # Use analyze mode servers: aws-knowledge-server (always) + aws-diagram-server (only if requested)
+        # Use analyze mode servers: aws-knowledge-server only
         from services.mode_server_manager import mode_server_manager
         analyze_servers_config = mode_server_manager.get_servers_for_mode("analyze")
         
-        # Filter servers: only include diagram server if user explicitly requested it
         analyze_servers = []
         for server in analyze_servers_config:
-            server_name = server["name"]
-            if server_name == "aws-diagram-server" and not wants_diagram:
-                logger.info(f"Skipping {server_name} - user did not request diagram")
-                continue
-            analyze_servers.append(server_name)
+            analyze_servers.append(server["name"])
         
         logger.info(f"Using analyze mode MCP servers: {analyze_servers}")
         
@@ -406,122 +397,9 @@ async def analyze_requirements(
         diagram_content = ""
         architecture_explanation = ""
         
-        if wants_diagram:
-            logger.info("Phase 2: Generating architecture diagram (user requested)...")
-            # Use ArchitectureDiagramAgent which follows the 5-step process:
-            # 1. Interpret requirements
-            # 2. Check AWS documentation for best practices
-            # 3. Generate Python code using diagrams package
-            # 4. Execute code to create diagram
-            # 5. Return diagram as image
-            from services.strands_agents_simple import ArchitectureDiagramAgent
-            # Put diagram server first (pool manager uses first server)
-            # Include AWS Knowledge server for documentation (will be combined with diagram tools)
-            diagram_servers = ["aws-diagram-server", "aws-knowledge-server"]
-            diagram_agent = ArchitectureDiagramAgent("architecture-diagram-generator", diagram_servers)
-            
-            # ArchitectureDiagramAgent follows the 5-step process automatically:
-            # 1. Interpret requirements
-            # 2. Check AWS documentation for best practices  
-            # 3. Generate Python code using diagrams package
-            # 4. Execute code to create diagram
-            # 5. Return diagram as image
-            diagram_inputs = {
-                "requirements": request.requirements,
-                "mode": "diagram"
-            }
-            
-            # Add analysis context if available
-            if analysis_content:
-                diagram_inputs["analysis_summary"] = analysis_content[:2000]
-            
-            diagram_result = await diagram_agent.execute(diagram_inputs)
-            diagram_content = diagram_result.get("content", "")
-            architecture_explanation = diagram_result.get("architecture_explanation", "")
-            
-            # Extract diagram content - prioritize PNG (from generate_diagram) or SVG from tool responses
-            # Note: The agent should have already extracted image and explanation separately,
-            # but we'll do a final cleanup here for safety
-            if diagram_content:
-                # Priority 1: Look for base64 PNG image data (generate_diagram tool returns PNG)
-                base64_png_match = re.search(r'data:image/png;base64,([A-Za-z0-9+/=]+)', diagram_content, re.IGNORECASE)
-                if base64_png_match:
-                    base64_data = base64_png_match.group(1)
-                    diagram_content = f"data:image/png;base64,{base64_data}"
-                    logger.info(f"Extracted PNG image from tool response ({len(diagram_content)} chars)")
-                # Priority 2: Try SVG directly (from tool response)
-                elif '<svg' in diagram_content.lower():
-                    svg_match = re.search(r'<svg[^>]*>.*?</svg>', diagram_content, re.DOTALL | re.IGNORECASE)
-                    if svg_match:
-                        diagram_content = svg_match.group(0).strip()
-                        logger.info(f"Extracted SVG diagram from tool response ({len(diagram_content)} chars)")
-                # Priority 3: Try any base64 image data (fallback)
-                elif "data:image" in diagram_content.lower() or "base64" in diagram_content.lower():
-                    base64_match = re.search(r'data:image/[^;]+;base64,[^\s"\'<>]+', diagram_content, re.IGNORECASE)
-                    if base64_match:
-                        diagram_content = base64_match.group(0)
-                        logger.info("Extracted base64 image from response")
-                # Try extracting from markdown code blocks (might wrap SVG)
-                elif "```" in diagram_content:
-                    # Try SVG/XML/HTML code blocks first
-                    svg_code_match = re.search(r'```(?:svg|xml|html)?\s*\n?(.*?)```', diagram_content, re.DOTALL | re.IGNORECASE)
-                    if svg_code_match:
-                        extracted = svg_code_match.group(1).strip()
-                        # Check if extracted content is SVG
-                        if "<svg" in extracted.lower():
-                            svg_match = re.search(r'<svg[^>]*>.*?</svg>', extracted, re.DOTALL | re.IGNORECASE)
-                            if svg_match:
-                                diagram_content = svg_match.group(0).strip()
-                                logger.info(f"Extracted SVG from code block ({len(diagram_content)} chars)")
-                            else:
-                                diagram_content = extracted
-                                logger.info("Extracted content from SVG code block")
-                        else:
-                            diagram_content = extracted
-                            logger.info("Extracted content from code block")
-                    else:
-                        # Try generic code block
-                        code_match = re.search(r'```(?:\w+)?\n?(.*?)```', diagram_content, re.DOTALL)
-                        if code_match:
-                            extracted = code_match.group(1).strip()
-                            # Check if extracted content is SVG
-                            if "<svg" in extracted.lower():
-                                svg_match = re.search(r'<svg[^>]*>.*?</svg>', extracted, re.DOTALL | re.IGNORECASE)
-                                if svg_match:
-                                    diagram_content = svg_match.group(0).strip()
-                                    logger.info(f"Extracted SVG from generic code block ({len(diagram_content)} chars)")
-                                else:
-                                    diagram_content = extracted
-                            else:
-                                diagram_content = extracted
-                                logger.info("Extracted diagram from code block")
-                # Try Mermaid format (fallback)
-                elif "```mermaid" in diagram_content:
-                    mermaid_match = re.search(r'```mermaid\n(.*?)\n```', diagram_content, re.DOTALL)
-                    if mermaid_match:
-                        diagram_content = mermaid_match.group(1)
-                        logger.info("Extracted Mermaid diagram from response")
-                
-                # Final validation - ensure we have valid SVG
-                if diagram_content and not diagram_content.strip().startswith('<svg') and not diagram_content.strip().startswith('data:image'):
-                    logger.warning(f"Diagram content doesn't appear to be valid SVG or image. Length: {len(diagram_content)}, Preview: {diagram_content[:200]}")
-                
-                # Log architecture explanation if present
-                if architecture_explanation:
-                    logger.info(f"Architecture explanation extracted: {len(architecture_explanation)} characters")
-                
-                logger.info(f"Diagram generation completed: {len(diagram_content)} characters")
-                logger.info(f"Diagram content preview: {diagram_content[:200] if diagram_content else 'Empty'}")
-                
-                # Log if diagram generation failed
-                if not diagram_content or len(diagram_content) < 50:
-                    logger.warning("Diagram content appears to be empty or too short - diagram generation may have failed")
-                    logger.warning(f"Full diagram result keys: {list(diagram_result.keys()) if isinstance(diagram_result, dict) else 'Not a dict'}")
-                    logger.warning(f"Diagram result content type: {type(diagram_content)}")
-                    if isinstance(diagram_result, dict):
-                        logger.warning(f"Diagram result: {str(diagram_result)[:500]}")
-        else:
-            logger.info("Phase 2: Skipping diagram generation - user did not request diagram")
+        # Diagram generation removed - no diagram server available
+        diagram_content = ""
+        architecture_explanation = ""
         
         # Step 6: Store analysis context for future follow-ups
         if analysis_content:
@@ -627,17 +505,11 @@ def detect_generation_intent(requirements: str) -> Dict[str, bool]:
     """
     Detect user intent from requirements text.
     Returns dict with flags for what to generate.
-    CloudFormation is always True (default), diagram and cost are optional.
+    CloudFormation is always True (default).
     """
-    wants_diagram = detect_diagram_intent(requirements)
-    wants_cost = detect_pricing_intent(requirements)
-    
     # CloudFormation is default (always True)
-    # Diagram and cost only if explicitly requested
     return {
-        "cloudformation": True,  # Always generate CF template
-        "diagram": wants_diagram,  # Only if requested
-        "cost": wants_cost  # Only if requested
+        "cloudformation": True  # Always generate CF template
     }
 
 @app.post("/generate")
@@ -645,7 +517,6 @@ async def generate_architecture(request: GenerationRequest):
     """
     Generate Mode: Always generates CloudFormation template.
     Returns complete template with outputs, parameters, resources, and deployment instructions.
-    Diagram and pricing are optional enhancements available via separate endpoints.
     """
     
     logger.info(f"Starting CloudFormation generation for requirements: '{request.requirements[:100]}...'")
@@ -695,11 +566,8 @@ async def generate_architecture(request: GenerationRequest):
         region = "us-east-1"  # Default region
         deployment_instructions = generate_deployment_instructions(cloudformation_template, region)
         
-        # Always suggest diagram and pricing (they're optional enhancements)
-        follow_up_suggestions = [
-            "Show me the architecture diagram",
-            "What's the estimated cost?"
-        ]
+        # No follow-up suggestions for generate mode
+        follow_up_suggestions = []
         
         logger.info(f"✅ CloudFormation template generated: {len(cloudformation_template)} characters")
         logger.info(f"   - Resources: {parsed_template['total_resources']}")
@@ -708,10 +576,10 @@ async def generate_architecture(request: GenerationRequest):
         
         return GenerationResponse(
             cloudformation_template=cloudformation_template,
-            architecture_diagram="",  # Empty - generated on-demand via /generate/diagram
+            architecture_diagram="",  # Empty - not generated in generate mode
             cost_estimate={
                 "monthly_cost": None,
-                "message": "Cost estimate not generated. Click 'Estimate Costs' to generate."
+                "message": "Cost estimate not available in generate mode."
             },
             mcp_servers_enabled=cfn_servers,
             analysis_summary=summary,
@@ -733,143 +601,6 @@ async def generate_architecture(request: GenerationRequest):
         logger.error(f"   - Error type: {type(e).__name__}")
         raise HTTPException(status_code=500, detail=f"Failed to generate CloudFormation template: {str(e)}")
 
-@app.post("/generate/diagram")
-async def generate_diagram_from_template(request: DiagramRequest):
-    """
-    Generate architecture diagram from existing CloudFormation template.
-    Uses diagram MCP server with CF template context.
-    Regenerates diagram every time (no caching).
-    """
-    
-    logger.info(f"Generating architecture diagram from CloudFormation template (length: {len(request.cloudformation_template)} chars)")
-    
-    try:
-        # Parse CloudFormation template to extract context
-        parsed_template = parse_cloudformation_template(request.cloudformation_template)
-        
-        # Use diagram server + knowledge server for documentation
-        diagram_servers = ["aws-diagram-server", "aws-knowledge-server"]
-        diagram_agent = ArchitectureDiagramAgent("architecture-diagram-generator", diagram_servers)
-        
-        # Create diagram inputs with CloudFormation context
-        diagram_inputs = {
-            "requirements": request.original_question,
-            "mode": "diagram",
-            "cloudformation_summary": f"""
-CloudFormation Template Summary:
-- AWS Services: {', '.join(parsed_template['aws_services'])}
-- Total Resources: {parsed_template['total_resources']}
-- Resource Types: {', '.join(list(parsed_template['resource_types'].keys())[:10])}
-
-Key Resources:
-{chr(10).join([f"- {r['logical_id']} ({r['type']}): {r['properties_summary']}" for r in parsed_template['resources'][:15]])}
-""",
-            "aws_services": parsed_template["aws_services"],
-            "cloudformation_content": request.cloudformation_template[:2000]  # Limit for context
-        }
-        
-        # Generate diagram
-        diagram_result = await diagram_agent.execute(diagram_inputs)
-        diagram_content = diagram_result.get("content", "")
-        architecture_explanation = diagram_result.get("architecture_explanation", "")
-        
-        if not diagram_content:
-            raise Exception("Diagram generation returned empty content")
-        
-        logger.info(f"✅ Architecture diagram generated: {len(diagram_content)} characters")
-        
-        return {
-            "architecture_diagram": diagram_content,
-            "architecture_explanation": architecture_explanation,
-            "mcp_servers_used": diagram_servers,
-            "success": True
-        }
-    
-    except Exception as e:
-        logger.error(f"❌ Failed to generate architecture diagram: {str(e)}")
-        raise HTTPException(status_code=500, detail=f"Failed to generate architecture diagram: {str(e)}")
-
-@app.post("/generate/pricing")
-async def generate_cost_estimate(request: PricingRequest):
-    """
-    Generate cost estimate from existing CloudFormation template.
-    Uses pricing MCP server with CF template context.
-    Regenerates estimate every time (no caching).
-    """
-    
-    logger.info(f"Generating cost estimate from CloudFormation template (length: {len(request.cloudformation_template)} chars)")
-    
-    try:
-        # Parse CloudFormation template to extract resources
-        parsed_template = parse_cloudformation_template(request.cloudformation_template)
-        
-        # Use pricing server for cost estimation
-        from services.mode_server_manager import mode_server_manager
-        pricing_servers = ["aws-pricing-server"]
-        
-        # Initialize orchestrator with pricing server
-        strands_orchestrator = MCPEnabledOrchestrator(pricing_servers)
-        await strands_orchestrator.initialize()
-        
-        # Create cost estimation inputs with CloudFormation context
-        cost_inputs = {
-            "requirements": request.original_question,
-            "detected_keywords": [],
-            "detected_intents": [],
-            "complexity_level": "medium",
-            "analysis_reasoning": [],
-            "cloudformation_summary": f"""
-CloudFormation Template Analysis:
-- AWS Services: {', '.join(parsed_template['aws_services'])}
-- Total Resources: {parsed_template['total_resources']}
-- Resource Types: {', '.join(list(parsed_template['resource_types'].keys()))}
-
-Resources for Cost Estimation:
-{chr(10).join([f"- {r['logical_id']} ({r['type']}): {r['properties_summary']}" for r in parsed_template['resources']])}
-""",
-            "cloudformation_content": request.cloudformation_template[:2000],
-            "parsed_resources": {r["logical_id"]: r for r in parsed_template["resources"]},
-            "key_properties": {r["logical_id"]: {"type": r["type"], "summary": r["properties_summary"]} for r in parsed_template["resources"]}
-        }
-        
-        # Generate cost estimate
-        generate_flags = {"cloudformation": False, "diagram": False, "cost": True}
-        results = await strands_orchestrator.execute_all(cost_inputs, generate_flags)
-        
-        cost_result = results.get("cost", {})
-        cost_content = cost_result.get("content", {})
-        
-        # Parse cost estimate response
-        if isinstance(cost_content, dict):
-            cost_estimate = {
-                "monthly_cost": cost_content.get("monthly_cost", "$500-1000"),
-                "cost_drivers": cost_content.get("cost_drivers", []),
-                "optimizations": cost_content.get("optimizations", []),
-                "scaling": cost_content.get("scaling", "Costs scale linearly with usage"),
-                "architecture_type": cost_content.get("architecture_type", "Multi-service"),
-                "region": cost_content.get("region", "us-east-1")
-            }
-        else:
-            # Try to extract cost from text response
-            import re
-            monthly_match = re.search(r'\$[\d,]+(?:-\$[\d,]+)?', str(cost_content))
-            cost_estimate = {
-                "monthly_cost": monthly_match.group(0) if monthly_match else "$500-1000",
-                "breakdown": str(cost_content)[:500] if cost_content else "Error generating cost estimate",
-                "region": "us-east-1"
-            }
-        
-        logger.info(f"✅ Cost estimate generated: {cost_estimate.get('monthly_cost', 'N/A')}")
-        
-        return {
-            "cost_estimate": cost_estimate,
-            "mcp_servers_used": pricing_servers,
-            "success": True
-        }
-    
-    except Exception as e:
-        logger.error(f"❌ Failed to generate cost estimate: {str(e)}")
-        raise HTTPException(status_code=500, detail=f"Failed to generate cost estimate: {str(e)}")
 
 @app.post("/follow-up")
 async def handle_follow_up_question(request: FollowUpRequest, session_id: Optional[str] = None):
@@ -902,7 +633,7 @@ async def handle_follow_up_question(request: FollowUpRequest, session_id: Option
         follow_up_prompt = f"""
         You are an AWS Solution Architect answering follow-up questions about an existing architecture.
         
-        Context: The user has already generated a CloudFormation template, diagram, and cost estimate.
+        Context: The user has already generated a CloudFormation template.
         Current Architecture Context: {request.architecture_context or "No specific context provided"}
         
         Recent Conversation History:
@@ -915,7 +646,7 @@ async def handle_follow_up_question(request: FollowUpRequest, session_id: Option
         - References the existing architecture when relevant
         - Uses conversation history to provide context-aware responses
         - Provides practical guidance and explanations
-        - Does NOT regenerate CloudFormation templates, diagrams, or cost estimates
+        - Does NOT regenerate CloudFormation templates
         - Focuses on answering the question with AWS knowledge and best practices
         
         If the question requires modifications to the architecture, explain what would need to change
@@ -1191,17 +922,7 @@ async def stream_generate(request: GenerationRequest, session_id: Optional[str] 
                 logger.error(f"Error generating CloudFormation template: {e}")
                 yield f"data: {json.dumps({'type': 'error', 'error': str(e)})}\n\n"
             
-            # Always send suggestions for diagram and pricing (optional enhancements)
-            follow_up_suggestions = [
-                "Generate architecture diagram",
-                "Estimate costs for this architecture"
-            ]
-            yield f"data: {json.dumps({'type': 'follow_up_suggestions', 'suggestions': follow_up_suggestions})}\n\n"
-            
-            # Note: Diagram and cost generation are now handled by separate endpoints:
-            # - /generate/diagram - generates diagram on-demand
-            # - /generate/pricing - generates cost estimate on-demand
-            # Users trigger these via buttons in the UI
+            # No follow-up suggestions for generate mode
             
             # Send completion signal
             yield f"data: {json.dumps({
@@ -1246,10 +967,6 @@ async def stream_analyze(request: GenerationRequest, session_id: Optional[str] =
             from services.question_classifier import classify_question
             question_type = classify_question(request.requirements)
             logger.info(f"Question classified as: {question_type['type']} (confidence: {question_type['confidence']})")
-            
-            # Detect if user wants diagram
-            wants_diagram = detect_diagram_intent(request.requirements)
-            logger.info(f"Diagram intent detected: {wants_diagram}")
             
             # Phase 1: Stream knowledge analysis
             logger.info("Phase 1: Streaming knowledge analysis...")
@@ -1338,83 +1055,9 @@ async def stream_analyze(request: GenerationRequest, session_id: Optional[str] =
             # Signal end of knowledge phase
             yield f"data: {json.dumps({'type': 'phase_complete', 'phase': 'knowledge'})}\n\n"
             
-            # Phase 2: Generate architecture diagram only if user explicitly requested it
+            # Diagram generation removed - no diagram server available
             diagram_content = ""
-            if wants_diagram:
-                logger.info("Phase 2: Generating architecture diagram (user requested)...")
-                yield f"data: {json.dumps({'type': 'status', 'message': 'Generating architecture diagram...'})}\n\n"
-                
-                try:
-                    # Use ArchitectureDiagramAgent which follows the 5-step process
-                    from services.strands_agents_simple import ArchitectureDiagramAgent
-                    # Put diagram server first (pool manager uses first server)
-                    # Include AWS Knowledge server for documentation (will be combined with diagram tools)
-                    diagram_servers = ["aws-diagram-server", "aws-knowledge-server"]
-                    diagram_agent = ArchitectureDiagramAgent("architecture-diagram-generator", diagram_servers)
-                    
-                    # ArchitectureDiagramAgent follows the 5-step process automatically
-                    diagram_inputs = {
-                        "requirements": request.requirements,
-                        "mode": "diagram"
-                    }
-                    
-                    # Add analysis context if available
-                    if analysis_content:
-                        diagram_inputs["analysis_summary"] = analysis_content[:2000]
-                    
-                    diagram_result = await diagram_agent.execute(diagram_inputs)
-                    diagram_content = diagram_result.get("content", "")
-                    
-                    # Extract diagram content - prioritize SVG from tool responses
-                    if diagram_content:
-                        import re
-                        # First, try to extract SVG directly (from tool response)
-                        svg_match = re.search(r'<svg[^>]*>.*?</svg>', diagram_content, re.DOTALL | re.IGNORECASE)
-                        if svg_match:
-                            diagram_content = svg_match.group(0)
-                            logger.info("Extracted SVG diagram from tool response")
-                        # Try base64 image data
-                        elif "data:image" in diagram_content or "base64" in diagram_content:
-                            base64_match = re.search(r'data:image/[^;]+;base64,[^\s"\'<>]+', diagram_content)
-                            if base64_match:
-                                diagram_content = base64_match.group(0)
-                                logger.info("Extracted base64 image from response")
-                        # Try Mermaid format
-                        elif "```mermaid" in diagram_content:
-                            mermaid_match = re.search(r'```mermaid\n(.*?)\n```', diagram_content, re.DOTALL)
-                            if mermaid_match:
-                                diagram_content = mermaid_match.group(1)
-                                logger.info("Extracted Mermaid diagram from response")
-                        # Try extracting from code blocks
-                        elif "```" in diagram_content:
-                            code_match = re.search(r'```(?:\w+)?\n(.*?)\n```', diagram_content, re.DOTALL)
-                            if code_match:
-                                extracted = code_match.group(1)
-                                # Check if extracted content is SVG
-                                if "<svg" in extracted:
-                                    svg_match = re.search(r'<svg[^>]*>.*?</svg>', extracted, re.DOTALL | re.IGNORECASE)
-                                    if svg_match:
-                                        diagram_content = svg_match.group(0)
-                                        logger.info("Extracted SVG from code block")
-                                else:
-                                    diagram_content = extracted
-                                    logger.info("Extracted diagram from code block")
-                    
-                    # Log diagram content info for debugging
-                    if diagram_content:
-                        logger.info(f"Diagram extracted: {len(diagram_content)} chars, starts with: {diagram_content[:100]}")
-                        # Send diagram
-                        yield f"data: {json.dumps({'type': 'diagram', 'diagram': diagram_content})}\n\n"
-                    else:
-                        logger.warning(f"No diagram content generated. Full result: {diagram_result}")
-                        yield f"data: {json.dumps({'type': 'diagram', 'diagram': '', 'error': 'Diagram generation returned empty content'})}\n\n"
-                        
-                except Exception as e:
-                    logger.error(f"Diagram generation error: {str(e)}")
-                    yield f"data: {json.dumps({'type': 'diagram_error', 'error': str(e)})}\n\n"
-            else:
-                logger.info("Phase 2: Skipping diagram generation - user did not request diagram")
-                yield f"data: {json.dumps({'type': 'diagram', 'diagram': ''})}\n\n"
+            yield f"data: {json.dumps({'type': 'diagram', 'diagram': ''})}\n\n"
             
             # Send completion signal with metadata
             yield f"data: {json.dumps({

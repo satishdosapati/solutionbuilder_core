@@ -22,8 +22,8 @@ export interface CostEstimate {
 
 export interface GenerationResponse {
   cloudformation_template: string;
-  architecture_diagram: string;
-  cost_estimate: CostEstimate;
+  architecture_diagram?: string;  // Optional - not generated in generate mode
+  cost_estimate?: CostEstimate;   // Optional - not generated in generate mode
   mcp_servers_enabled: string[];
   analysis_summary?: any; // Add analysis summary
   follow_up_suggestions?: string[]; // Follow-up suggestions based on what wasn't generated

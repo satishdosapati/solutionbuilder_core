@@ -637,26 +637,11 @@ function App() {
         
         // Check if this is a follow-up request for missing artifacts (diagram or cost)
         const hasExistingArchitecture = conversationState.context.currentArchitecture;
-        const isFollowUpForMissingArtifact = hasExistingArchitecture && 
-          (message.toLowerCase().includes('diagram') || 
-           message.toLowerCase().includes('cost') || 
-           message.toLowerCase().includes('pricing') ||
-           message.toLowerCase().includes('show me') ||
-           message.toLowerCase().includes('what\'s the'));
-        
         // Prepare request with existing context if available
         const generateRequest: any = { requirements: message };
-        if (isFollowUpForMissingArtifact && hasExistingArchitecture) {
-          console.log('Follow-up request detected, using existing architecture context');
-          if (hasExistingArchitecture.cloudformation) {
-            generateRequest.existing_cloudformation_template = hasExistingArchitecture.cloudformation;
-          }
-          if (hasExistingArchitecture.diagram) {
-            generateRequest.existing_diagram = hasExistingArchitecture.diagram;
-          }
-          if (hasExistingArchitecture.cost) {
-            generateRequest.existing_cost_estimate = hasExistingArchitecture.cost;
-          }
+        if (hasExistingArchitecture && hasExistingArchitecture.cloudformation) {
+          console.log('Using existing CloudFormation template context');
+          generateRequest.existing_cloudformation_template = hasExistingArchitecture.cloudformation;
         }
         
         // Add assistant message placeholder first
@@ -671,8 +656,6 @@ function App() {
           // Try streaming first for better user experience
           console.log('Attempting streaming for generate mode...');
           let cloudformationContent = '';
-          let diagramContent = '';
-          let costEstimate: any = null;
           let streamingResult: any = null;
           let followUpSuggestions: string[] = [];
           let currentStatus = 'Generating your architecture...';
@@ -739,39 +722,6 @@ function App() {
                     }
                     return { ...prev, messages: updatedMessages };
                   });
-                } else if (chunk.type === 'diagram' && chunk.content) {
-                  diagramContent += chunk.content;
-                } else if (chunk.type === 'diagram_complete' && chunk.diagram) {
-                  diagramContent = chunk.diagram;
-                  setConversationState(prev => {
-                    const updatedMessages = [...prev.messages];
-                    const lastMessage = updatedMessages[updatedMessages.length - 1];
-                    if (lastMessage && lastMessage.type === 'assistant') {
-                      lastMessage.content = `✅ CloudFormation template generated\n✅ Architecture diagram generated\n\nGenerating cost estimate...`;
-                      if (!lastMessage.context) lastMessage.context = {};
-                      if (!lastMessage.context.result) lastMessage.context.result = {};
-                      lastMessage.context.result.architecture_diagram = diagramContent;
-                    }
-                    return { ...prev, messages: updatedMessages };
-                  });
-                } else if (chunk.type === 'cost_complete' && chunk.cost_estimate) {
-                  costEstimate = chunk.cost_estimate;
-                  setConversationState(prev => {
-                    const updatedMessages = [...prev.messages];
-                    const lastMessage = updatedMessages[updatedMessages.length - 1];
-                    if (lastMessage && lastMessage.type === 'assistant') {
-                      const hasDiagram = diagramContent && diagramContent.trim();
-                      const hasCost = costEstimate?.monthly_cost;
-                      let content = '✅ CloudFormation template created';
-                      if (hasDiagram) content += '\n✅ Architecture diagram generated';
-                      if (hasCost) content += `\n✅ Cost estimate: ${costEstimate.monthly_cost}`;
-                      lastMessage.content = `I've generated your architecture:\n\n${content}`;
-                      if (!lastMessage.context) lastMessage.context = {};
-                      if (!lastMessage.context.result) lastMessage.context.result = {};
-                      lastMessage.context.result.cost_estimate = costEstimate;
-                    }
-                    return { ...prev, messages: updatedMessages };
-                  });
                 } else if (chunk.type === 'follow_up_suggestions' && chunk.suggestions) {
                   followUpSuggestions = chunk.suggestions;
                   setConversationState(prev => {
@@ -792,11 +742,7 @@ function App() {
             );
             
             // Update final message with complete results and context
-            const hasDiagram = (streamingResult?.architecture_diagram || diagramContent) && (streamingResult?.architecture_diagram || diagramContent).trim();
-            const hasCost = streamingResult?.cost_estimate?.monthly_cost || costEstimate?.monthly_cost;
             let responseContent = '✅ CloudFormation template created';
-            if (hasDiagram) responseContent += '\n✅ Architecture diagram generated';
-            if (hasCost) responseContent += `\n✅ Cost estimate: ${streamingResult?.cost_estimate?.monthly_cost || costEstimate?.monthly_cost}`;
             
             setConversationState(prev => {
               const updatedMessages = [...prev.messages];
@@ -806,8 +752,8 @@ function App() {
                 const finalResult = {
                   ...streamingResult,
                   cloudformation_template: streamingResult?.cloudformation_template || cloudformationContent,
-                  architecture_diagram: streamingResult?.architecture_diagram || diagramContent,
-                  cost_estimate: streamingResult?.cost_estimate || costEstimate,
+                  architecture_diagram: '',
+                  cost_estimate: { monthly_cost: null, message: 'Cost estimate not available in generate mode.' },
                   follow_up_suggestions: streamingResult?.follow_up_suggestions || followUpSuggestions,
                   // Note: For streaming, template parsing happens on backend when complete
                   // These fields will be populated if backend sends them
@@ -836,12 +782,10 @@ function App() {
             });
             
             // Update current architecture immediately
-            if (streamingResult.cloudformation_template) {
+            if (streamingResult?.cloudformation_template || cloudformationContent) {
               updateContext({
                 currentArchitecture: {
-                  cloudformation: streamingResult.cloudformation_template,
-                  diagram: streamingResult.architecture_diagram,
-                  cost: streamingResult.cost_estimate
+                  cloudformation: streamingResult?.cloudformation_template || cloudformationContent
                 }
               });
             }
@@ -851,11 +795,7 @@ function App() {
             // Fallback to regular API call
             const result = await apiService.generateArchitecture(generateRequest);
             
-            const hasDiagram = result.architecture_diagram && result.architecture_diagram.trim();
-            const hasCost = result.cost_estimate?.monthly_cost;
             let responseContent = '✅ CloudFormation template created';
-            if (hasDiagram) responseContent += '\n✅ Architecture diagram generated';
-            if (hasCost) responseContent += `\n✅ Cost estimate: ${result.cost_estimate.monthly_cost}`;
             
             setConversationState(prev => {
               const updatedMessages = [...prev.messages];
@@ -865,8 +805,8 @@ function App() {
                 lastMessage.context = {
                   result: {
                     cloudformation_template: result.cloudformation_template,
-                    architecture_diagram: result.architecture_diagram || '',
-                    cost_estimate: result.cost_estimate,
+                    architecture_diagram: '',
+                    cost_estimate: { monthly_cost: null, message: 'Cost estimate not available in generate mode.' },
                     follow_up_suggestions: result.follow_up_suggestions || [],
                     template_outputs: (result as any).template_outputs,
                     template_parameters: (result as any).template_parameters,
@@ -892,9 +832,7 @@ function App() {
             if (result.cloudformation_template) {
               updateContext({
                 currentArchitecture: {
-                  cloudformation: result.cloudformation_template,
-                  diagram: result.architecture_diagram,
-                  cost: result.cost_estimate
+                  cloudformation: result.cloudformation_template
                 }
               });
             }
@@ -944,7 +882,7 @@ function App() {
         updateContext({ mode: 'generate' });
         addMessage({
           type: 'assistant',
-          content: 'Switched to generation mode. Please describe your architecture needs and I\'ll generate CloudFormation templates, diagrams, and cost estimates.',
+          content: 'Switched to generation mode. Please describe your architecture needs and I\'ll generate CloudFormation templates.',
           mode: 'generate'
         });
         break;

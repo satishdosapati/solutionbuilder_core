@@ -91,10 +91,8 @@ class IntentBasedMCPOrchestrator:
             "pub/sub": ["sns-sqs-server"],
             
             # Solutions Architect keywords
-            "architecture": ["diagram-server", "pricing-server", "cost-explorer-server"],
-            "diagram": ["diagram-server"],
-            "cost": ["pricing-server", "cost-explorer-server"],
-            "pricing": ["pricing-server"],
+            "architecture": ["cost-explorer-server"],
+            "cost": ["cost-explorer-server"],
             "budget": ["cost-explorer-server"],
             "monitoring": ["aws-knowledge-server"],
             "observability": ["aws-knowledge-server"],
@@ -230,9 +228,9 @@ class IntentBasedMCPOrchestrator:
                         reasoning.append("Microservices intent → Added container orchestration servers")
                         logger.info("Microservices intent -> Added container orchestration servers")
                     elif intent == "cost_optimization":
-                        recommended_servers.update(["pricing-server", "cost-explorer-server"])
-                        reasoning.append("Cost optimization intent → Added pricing and cost explorer servers")
-                        logger.info("Cost optimization intent -> Added pricing and cost explorer servers")
+                        recommended_servers.update(["cost-explorer-server"])
+                        reasoning.append("Cost optimization intent → Added cost explorer server")
+                        logger.info("Cost optimization intent -> Added cost explorer server")
                     break
         
         # Determine complexity level
@@ -243,8 +241,6 @@ class IntentBasedMCPOrchestrator:
         # Add comprehensive servers for complex requirements
         if complexity_level == "high":
             recommended_servers.update([
-                "diagram-server", 
-                "pricing-server", 
                 "cost-explorer-server",
                 "syntheticdata-server"
             ])

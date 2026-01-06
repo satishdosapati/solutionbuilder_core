@@ -19,6 +19,7 @@ Each folder has a short `README.md` (1 paragraph).
 - **Never commit `.env` files or hardcoded credentials — use `.gitignore` and `env.example` templates.**
 - Avoid redundant dependencies and UI libraries.
 - Code must read like documentation — clean, async, minimal.
+- **Never create new documentation files — always use existing trackers (`/docs/product_tracker.md`, `/prompts/prompt_tracker.md`) and follow their established formats.**
 
 ---
 
