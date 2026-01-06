@@ -188,32 +188,64 @@ const MessageBubble: React.FC<MessageBubbleProps> = ({ message, onActionClick })
     let incompleteBlock: { start: number; language: string; content: string } | null = null;
     
     if (isStreaming) {
-      // Find the last occurrence of opening triple backticks
-      const lastOpenBackticks = text.lastIndexOf('```');
+      // Find all occurrences of triple backticks
+      const backtickIndices: number[] = [];
+      let searchIndex = 0;
       
-      if (lastOpenBackticks !== -1) {
-        // Check if there's a closing backtick after this opening
-        const textAfterOpen = text.substring(lastOpenBackticks + 3);
-        const hasClosingBackticks = textAfterOpen.includes('```');
+      while (true) {
+        const nextIndex = text.indexOf('```', searchIndex);
+        if (nextIndex === -1) break;
+        backtickIndices.push(nextIndex);
+        searchIndex = nextIndex + 3;
+      }
+      
+      // Check if we have an odd number of backticks (unmatched opening)
+      // Or if the last backtick doesn't have a closing pair
+      if (backtickIndices.length > 0) {
+        const lastBacktickIndex = backtickIndices[backtickIndices.length - 1];
+        const textAfterLastBacktick = text.substring(lastBacktickIndex + 3);
         
-        if (!hasClosingBackticks) {
+        // Check if there's a closing ``` after this one
+        const hasClosingAfter = textAfterLastBacktick.includes('```');
+        
+        // Also check if we have an odd number (means unmatched opening)
+        const hasUnmatchedOpening = backtickIndices.length % 2 === 1;
+        
+        if (!hasClosingAfter || hasUnmatchedOpening) {
           // We have an incomplete code block
-          const beforeIncomplete = text.substring(0, lastOpenBackticks);
+          const textAfterOpen = textAfterLastBacktick;
           
           // Extract language identifier (if present)
-          const languageMatch = textAfterOpen.match(/^(\w+)?\s*\n/);
+          // Match: optional word chars, optional whitespace, then newline or end
+          const languageMatch = textAfterOpen.match(/^(\w+)?\s*(\n|$)/);
           const language = languageMatch ? (languageMatch[1] || '') : '';
+          // Content starts after language and optional newline
           const contentStart = languageMatch ? languageMatch[0].length : 0;
           const content = textAfterOpen.substring(contentStart);
           
+          console.log('[CodeBlock Detection] Incomplete block detected:', {
+            isStreaming,
+            backtickCount: backtickIndices.length,
+            hasClosingAfter,
+            hasUnmatchedOpening,
+            language,
+            contentLength: content.length,
+            contentPreview: content.substring(0, 50)
+          });
+          
           incompleteBlock = {
-            start: lastOpenBackticks,
+            start: lastBacktickIndex,
             language,
             content
           };
           
           // Process text before incomplete block
-          text = beforeIncomplete;
+          text = text.substring(0, lastBacktickIndex);
+        } else {
+          console.log('[CodeBlock Detection] All blocks complete:', {
+            isStreaming,
+            backtickCount: backtickIndices.length
+          });
         }
       }
     }
@@ -284,14 +316,18 @@ const MessageBubble: React.FC<MessageBubbleProps> = ({ message, onActionClick })
             // For incomplete blocks during streaming, render as plain code without syntax highlighting
             if (part.isIncomplete && isStreaming) {
               return (
-                <pre 
-                  key={index}
-                  className="bg-gray-100 dark:bg-gray-800 p-4 rounded-lg overflow-x-auto border border-gray-300 dark:border-gray-600"
-                >
-                  <code className="text-sm font-mono text-gray-800 dark:text-gray-200">
-                    {part.content}
-                  </code>
-                </pre>
+                <div key={index} className="relative">
+                  <pre 
+                    className="bg-gray-100 dark:bg-gray-800 p-4 rounded-lg overflow-x-auto border-2 border-dashed border-blue-400 dark:border-blue-500"
+                  >
+                    <code className="text-sm font-mono text-gray-800 dark:text-gray-200">
+                      {part.content}
+                    </code>
+                  </pre>
+                  <div className="absolute top-2 right-2 text-xs text-blue-600 dark:text-blue-400 bg-blue-100 dark:bg-blue-900 px-2 py-1 rounded">
+                    Streaming...
+                  </div>
+                </div>
               );
             }
             
@@ -571,10 +607,18 @@ const MessageBubble: React.FC<MessageBubbleProps> = ({ message, onActionClick })
                         )}
                       </h5>
                       <div className="text-sm text-blue-800 dark:text-blue-200 max-h-[300px] overflow-auto bg-white dark:bg-gray-800 p-3 rounded border">
-                        {renderMarkdownWithCodeBlocks(
-                          message.context.result.cloudformation_response,
-                          !message.context?.result?.cloudformation_template // isStreaming = true if template not complete yet
-                        )}
+                        {(() => {
+                          const isStreaming = !message.context?.result?.cloudformation_template;
+                          console.log('[MessageBubble] Rendering cloudformation_response:', {
+                            isStreaming,
+                            hasTemplate: !!message.context?.result?.cloudformation_template,
+                            responseLength: message.context.result.cloudformation_response?.length || 0
+                          });
+                          return renderMarkdownWithCodeBlocks(
+                            message.context.result.cloudformation_response,
+                            isStreaming
+                          );
+                        })()}
                       </div>
                     </div>
                   </div>
