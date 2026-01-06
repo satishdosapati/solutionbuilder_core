@@ -664,7 +664,11 @@ function App() {
             streamingResult = await apiService.generateArchitectureStream(
               generateRequest,
               (chunk: any) => {
-                console.log('Received generate chunk:', chunk.type);
+                console.log('Received generate chunk:', {
+                  type: chunk.type,
+                  contentLength: chunk.content?.length || 0,
+                  accumulatedLength: cloudformationContent.length
+                });
                 
                 if (chunk.type === 'status') {
                   // Update status message
@@ -694,7 +698,24 @@ function App() {
                     return { ...prev, messages: updatedMessages };
                   });
                 } else if (chunk.type === 'cloudformation_complete' && (chunk.content || chunk.cloudformation)) {
-                  cloudformationContent = chunk.content || chunk.cloudformation;
+                  // Use accumulated content if available and longer, otherwise use chunk content
+                  // The chunk.content should contain the complete response from backend
+                  const finalContent = chunk.content || chunk.cloudformation || cloudformationContent;
+                  
+                  // Safety check: use accumulated if it's longer (shouldn't happen, but safety first)
+                  const completeContent = cloudformationContent.length > finalContent.length 
+                    ? cloudformationContent 
+                    : finalContent;
+                  
+                  console.log('[Streaming] CloudFormation complete event:', {
+                    accumulatedLength: cloudformationContent.length,
+                    chunkContentLength: chunk.content?.length || 0,
+                    chunkCloudformationLength: chunk.cloudformation?.length || 0,
+                    finalContentLength: completeContent.length,
+                    reportedLength: chunk.content_length || 'not provided'
+                  });
+                  
+                  cloudformationContent = completeContent;
                   setConversationState(prev => {
                     const updatedMessages = [...prev.messages];
                     const lastMessage = updatedMessages[updatedMessages.length - 1];
@@ -703,9 +724,9 @@ function App() {
                       // Store full template in context for download/deploy
                       if (!lastMessage.context) lastMessage.context = {};
                       if (!lastMessage.context.result) lastMessage.context.result = {};
-                      lastMessage.context.result.cloudformation_template = cloudformationContent;
+                      lastMessage.context.result.cloudformation_template = completeContent;
                       // Store the full MCP server response
-                      lastMessage.context.result.cloudformation_response = cloudformationContent;
+                      lastMessage.context.result.cloudformation_response = completeContent;
                       // Store parsed template data if available
                       if (chunk.template_outputs) {
                         lastMessage.context.result.template_outputs = chunk.template_outputs;
@@ -744,6 +765,15 @@ function App() {
             // Update final message with complete results and context
             let responseContent = '✅ CloudFormation template created';
             
+            // Ensure we use the accumulated content (should already be set, but safety check)
+            const finalTemplateContent = cloudformationContent || streamingResult?.cloudformation_template || '';
+            
+            console.log('[Streaming] Final result preparation:', {
+              accumulatedLength: cloudformationContent.length,
+              streamingResultTemplateLength: streamingResult?.cloudformation_template?.length || 0,
+              finalTemplateLength: finalTemplateContent.length
+            });
+            
             setConversationState(prev => {
               const updatedMessages = [...prev.messages];
               const lastMessage = updatedMessages[updatedMessages.length - 1];
@@ -751,7 +781,7 @@ function App() {
                 lastMessage.content = `I've generated your architecture:\n\n${responseContent}`;
                 const finalResult = {
                   ...streamingResult,
-                  cloudformation_template: streamingResult?.cloudformation_template || cloudformationContent,
+                  cloudformation_template: finalTemplateContent,
                   architecture_diagram: '',
                   cost_estimate: { monthly_cost: null, message: 'Cost estimate not available in generate mode.' },
                   follow_up_suggestions: streamingResult?.follow_up_suggestions || followUpSuggestions,
@@ -781,11 +811,15 @@ function App() {
               clarificationQuestions: []
             });
             
-            // Update current architecture immediately
-            if (streamingResult?.cloudformation_template || cloudformationContent) {
+            // Update current architecture immediately with complete template
+            const architectureTemplate = cloudformationContent || streamingResult?.cloudformation_template || '';
+            if (architectureTemplate) {
+              console.log('[Streaming] Updating context with architecture template:', {
+                templateLength: architectureTemplate.length
+              });
               updateContext({
                 currentArchitecture: {
-                  cloudformation: streamingResult?.cloudformation_template || cloudformationContent
+                  cloudformation: architectureTemplate
                 }
               });
             }

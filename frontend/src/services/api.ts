@@ -356,11 +356,25 @@ export const apiService = {
                   cloudformationContent += data.content;
                   onChunk({ type: 'cloudformation', content: data.content });
                 } else if (data.type === 'cloudformation_complete' && data.content) {
-                  cloudformationContent = data.content;
+                  // Use the complete event content (it contains the full accumulated content from backend)
+                  // But prefer accumulated content if it's longer (safety check)
+                  const completeContent = data.content.length >= cloudformationContent.length 
+                    ? data.content 
+                    : cloudformationContent || data.content;
+                  
+                  console.log('[Streaming] CloudFormation complete:', {
+                    accumulatedLength: cloudformationContent.length,
+                    eventContentLength: data.content.length,
+                    finalContentLength: completeContent.length,
+                    contentLength: data.content_length || 'not provided'
+                  });
+                  
+                  cloudformationContent = completeContent;
                   onChunk({ 
                     type: 'cloudformation_complete', 
-                    cloudformation: data.content,
-                    content: data.content,
+                    cloudformation: completeContent,
+                    content: completeContent,
+                    content_length: completeContent.length,
                     template_outputs: data.template_outputs,
                     template_parameters: data.template_parameters,
                     resources_summary: data.resources_summary,

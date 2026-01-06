@@ -880,10 +880,13 @@ async def stream_generate(request: GenerationRequest, session_id: Optional[str] 
                     # Stream CloudFormation generation
                     cf_prompt = strands_orchestrator._create_prompt_for_agent(agent_inputs, "cloudformation")
                     
+                    chunk_count = 0
                     async for event in cf_agent.stream_async(cf_prompt):
                         if "data" in event:
                             chunk_text = event["data"]
                             cf_content += chunk_text
+                            chunk_count += 1
+                            logger.debug(f"Streaming chunk #{chunk_count}: {len(chunk_text)} chars (total: {len(cf_content)} chars)")
                             yield f"data: {json.dumps({'type': 'cloudformation', 'content': chunk_text})}\n\n"
                         elif "error" in event:
                             logger.error(f"CloudFormation streaming error: {event['error']}")
@@ -895,7 +898,14 @@ async def stream_generate(request: GenerationRequest, session_id: Optional[str] 
                                 text_content = result.get("text") or result.get("message", {}).get("text", "")
                                 if text_content:
                                     cf_content += text_content
+                                    chunk_count += 1
+                                    logger.debug(f"Streaming result chunk #{chunk_count}: {len(text_content)} chars (total: {len(cf_content)} chars)")
                                     yield f"data: {json.dumps({'type': 'cloudformation', 'content': text_content})}\n\n"
+                    
+                    logger.info(f"✅ Streaming complete: {chunk_count} chunks received, {len(cf_content)} total characters")
+                    
+                    # Log complete content length for verification
+                    logger.info(f"✅ Complete CloudFormation template streamed: {len(cf_content)} characters")
                     
                     # Parse template to extract structured information
                     parsed_template = parse_cloudformation_template(cf_content)
@@ -904,7 +914,8 @@ async def stream_generate(request: GenerationRequest, session_id: Optional[str] 
                     # Send CloudFormation complete signal with full content and parsed data
                     yield f"data: {json.dumps({
                         'type': 'cloudformation_complete',
-                        'content': cf_content,
+                        'content': cf_content,  # Full accumulated content
+                        'content_length': len(cf_content),  # Add length for verification
                         'template_outputs': parsed_template.get('outputs', []),
                         'template_parameters': parsed_template.get('parameters', []),
                         'resources_summary': {
