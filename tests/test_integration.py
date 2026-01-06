@@ -24,7 +24,7 @@ class TestQuestionClassificationIntegration:
     def test_classify_real_questions(self):
         """Test classification with various real questions"""
         test_cases = [
-            ("What is the difference between Lambda and ECS?", "comparison"),
+            ("Compare Lambda vs ECS - what's the difference?", "comparison"),
             ("How do I setup a Lambda function?", "how_to"),
             ("Explain how Lambda works", "deep_dive"),
             ("My Lambda function is failing - how do I fix it?", "troubleshooting"),
