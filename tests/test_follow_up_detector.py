@@ -15,8 +15,12 @@ class TestFollowUpDetector:
         # Use the global session_manager instance (same one used by follow_up_detector)
         self.session_id = session_manager.create_session()
         
+        # Verify session was created
+        session = session_manager.get_session(self.session_id)
+        assert session is not None, "Session should be created successfully"
+        
         # Set up previous analysis context
-        session_manager.set_last_analysis(
+        result = session_manager.set_last_analysis(
             self.session_id,
             question="What is AWS Lambda?",
             answer="Lambda is a serverless compute service",
@@ -24,37 +28,58 @@ class TestFollowUpDetector:
             topics=["Serverless", "Compute"],
             summary="Lambda overview"
         )
+        assert result is True, "set_last_analysis should return True"
+        
+        # Verify analysis was stored
+        session = session_manager.get_session(self.session_id)
+        assert session is not None
+        assert "last_analysis" in session, "Session should have last_analysis after set_last_analysis"
+        assert session["last_analysis"]["services"] == ["Lambda", "S3"]
     
     def test_detect_follow_up_with_pattern(self):
         """Test detecting follow-up with follow-up patterns"""
+        # Verify session exists and has analysis
+        session = session_manager.get_session(self.session_id)
+        assert session is not None, "Session should exist"
+        assert "last_analysis" in session, "Session should have last_analysis"
+        
         result = detect_follow_up_question(
             "How do I use Lambda?",
             self.session_id
         )
-        # Pattern match gives 0.3, service match gives up to 0.4, total should be >= 0.4
-        assert result["confidence"] > 0.0
-        # With Lambda service match, should be detected as follow-up
-        assert result["is_follow_up"] is True or result["confidence"] >= 0.3
+        # Pattern "how do" gives 0.3, service "Lambda" match gives 0.4, total >= 0.7
+        assert result["confidence"] > 0.0, f"Expected confidence > 0, got {result['confidence']}. Reasoning: {result.get('reasoning', 'N/A')}"
+        # Should be detected as follow-up with pattern + service match
+        assert result["is_follow_up"] is True, f"Expected follow-up detection. Confidence: {result['confidence']}, Reasoning: {result.get('reasoning', 'N/A')}"
     
     def test_detect_follow_up_with_service_reference(self):
         """Test detecting follow-up that references previous services"""
+        # Verify session exists
+        session = session_manager.get_session(self.session_id)
+        assert session is not None
+        assert "last_analysis" in session
+        
         result = detect_follow_up_question(
             "Tell me more about Lambda",
             self.session_id
         )
-        # Should detect as follow-up due to service reference (Lambda is in previous services)
-        # Service match alone gives 0.4 confidence, which meets threshold
-        assert result["confidence"] >= 0.4
+        # "Tell me more" pattern gives 0.3, Lambda service match gives 0.4, total >= 0.7
+        assert result["confidence"] >= 0.4, f"Expected confidence >= 0.4, got {result['confidence']}. Reasoning: {result.get('reasoning', 'N/A')}"
         assert result["is_follow_up"] is True
     
     def test_detect_follow_up_with_topic_reference(self):
         """Test detecting follow-up that references previous topics"""
+        # Verify session exists
+        session = session_manager.get_session(self.session_id)
+        assert session is not None
+        assert "last_analysis" in session
+        
         result = detect_follow_up_question(
             "What about serverless architecture?",
             self.session_id
         )
-        # Topic match gives up to 0.3, pattern "what about" gives 0.3, total >= 0.6
-        assert result["confidence"] >= 0.3
+        # "What about" pattern gives 0.3, "serverless" topic match gives 0.3, total >= 0.6
+        assert result["confidence"] >= 0.3, f"Expected confidence >= 0.3, got {result['confidence']}. Reasoning: {result.get('reasoning', 'N/A')}"
         assert result["is_follow_up"] is True
     
     def test_detect_non_follow_up(self):

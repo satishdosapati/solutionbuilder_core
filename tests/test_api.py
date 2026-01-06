@@ -99,7 +99,7 @@ class TestAnalyzeEndpoint:
     @patch('backend.main.session_manager')
     @patch('backend.main.detect_follow_up_question')
     @patch('backend.main.classify_question')
-    @patch('backend.main.create_adaptive_prompt')
+    @patch('services.adaptive_prompt_generator.create_adaptive_prompt')
     @patch('services.quality_validator.validate_response_quality')
     @patch('services.context_extractor.extract_analysis_context')
     def test_analyze_success(self, mock_extract, mock_validate, mock_prompt, 
@@ -294,17 +294,16 @@ class TestFollowUpEndpoint:
 class TestDiagramEndpoints:
     """Test diagram-related endpoints"""
     
-    @patch('services.diagram_storage.get_diagram_stats')
-    def test_get_diagram_stats(self, mock_get_stats):
+    def test_get_diagram_stats(self):
         """Test getting diagram statistics"""
-        mock_get_stats.return_value = {
-            "total_diagrams": 0,
-            "total_size_kb": 0
-        }
+        # Test without mocking - should work if diagrams directory exists
         response = client.get("/api/diagrams/stats")
-        assert response.status_code == 200
+        # Should return 200 even if no diagrams exist
+        assert response.status_code == 200, f"Expected 200, got {response.status_code}. Response: {response.text}"
         data = response.json()
         assert isinstance(data, dict)
+        # Should have stats structure
+        assert "total_files" in data or "total_diagrams" in data or "error" in data
     
     def test_cleanup_diagrams(self):
         """Test diagram cleanup endpoint"""
