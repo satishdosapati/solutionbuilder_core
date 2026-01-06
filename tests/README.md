@@ -57,8 +57,14 @@ pytest tests/test_integration.py -v
 # Run MCP integration tests (requires MCP servers running)
 pytest tests/test_integration_mcp.py --test-mcp -v
 
+# Run security tests
+pytest tests/test_security.py -v
+
 # Run all tests except MCP tests
 pytest -m "not mcp"
+
+# Run only security tests
+pytest -m security -v
 ```
 
 ### Frontend Tests
@@ -98,6 +104,7 @@ The test suite covers:
 - ✅ Error handling and edge cases
 - ✅ **Integration tests** - Real service integration without mocking business logic
 - ✅ **MCP integration tests** - Tests with real MCP servers (optional, use `--test-mcp` flag)
+- ✅ **Security tests** - Prompt injection, input validation, XSS, SQL injection, session security
 
 ### Frontend
 - ✅ API service methods (brainstorm, analyze, generate, follow-up)
