@@ -1,5 +1,4 @@
 import React, { useState } from 'react';
-import { apiService } from '../services/api';
 
 interface GenerateOutputDisplayProps {
   results: {
@@ -48,11 +47,10 @@ interface GenerateOutputDisplayProps {
   onUpdate?: (updatedResults: GenerateOutputDisplayProps['results']) => void;
 }
 
-const GenerateOutputDisplay: React.FC<GenerateOutputDisplayProps> = ({ results, originalQuestion = '', onUpdate }) => {
+const GenerateOutputDisplay: React.FC<GenerateOutputDisplayProps> = ({ results }) => {
   const [activeTab, setActiveTab] = useState<'template' | 'outputs' | 'deploy'>('template');
   const [templateExpanded, setTemplateExpanded] = useState(false);
   const [copied, setCopied] = useState(false);
-  const [localResults, setLocalResults] = useState(results);
 
   const downloadFile = (content: string, filename: string, mimeType: string) => {
     const blob = new Blob([content], { type: mimeType });
@@ -154,16 +152,16 @@ const GenerateOutputDisplay: React.FC<GenerateOutputDisplayProps> = ({ results, 
   };
 
   const downloadTemplate = () => {
-    if (localResults.cloudformation_template) {
-      const cleanTemplate = getCleanTemplate(localResults.cloudformation_template);
+    if (results.cloudformation_template) {
+      const cleanTemplate = getCleanTemplate(results.cloudformation_template);
       downloadFile(cleanTemplate, 'cloudformation-template.yaml', 'text/yaml');
     }
   };
 
 
   const handleDeployToAWS = () => {
-    const cleanTemplate = getCleanTemplate(localResults.cloudformation_template);
-    const region = localResults.cost_estimate?.region || 'us-east-1';
+    const cleanTemplate = getCleanTemplate(results.cloudformation_template);
+    const region = results.cost_estimate?.region || 'us-east-1';
     
     // 1. Download template file
     downloadFile(cleanTemplate, 'cloudformation-template.yaml', 'text/yaml');
@@ -185,7 +183,7 @@ const GenerateOutputDisplay: React.FC<GenerateOutputDisplayProps> = ({ results, 
   };
 
 
-  const cleanTemplate = getCleanTemplate(localResults.cloudformation_template || '');
+  const cleanTemplate = getCleanTemplate(results.cloudformation_template || '');
   const templateLines = cleanTemplate.split('\n').length;
 
   return (
@@ -246,7 +244,7 @@ const GenerateOutputDisplay: React.FC<GenerateOutputDisplayProps> = ({ results, 
               Template
             </span>
           </button>
-          {localResults.template_outputs && localResults.template_outputs.length > 0 && (
+          {results.template_outputs && results.template_outputs.length > 0 && (
             <button
               onClick={() => setActiveTab('outputs')}
               className={`
@@ -265,7 +263,7 @@ const GenerateOutputDisplay: React.FC<GenerateOutputDisplayProps> = ({ results, 
               </span>
             </button>
           )}
-          {localResults.deployment_instructions && (
+          {results.deployment_instructions && (
             <button
               onClick={() => setActiveTab('deploy')}
               className={`
@@ -289,7 +287,7 @@ const GenerateOutputDisplay: React.FC<GenerateOutputDisplayProps> = ({ results, 
 
       {/* Tab Content */}
       <div className="flex-1 overflow-y-auto">
-        {activeTab === 'outputs' && localResults.template_outputs && localResults.template_outputs.length > 0 && (
+        {activeTab === 'outputs' && results.template_outputs && results.template_outputs.length > 0 && (
           <div className="p-6 space-y-4">
             <div className="flex justify-between items-center">
               <div>
@@ -301,7 +299,7 @@ const GenerateOutputDisplay: React.FC<GenerateOutputDisplayProps> = ({ results, 
             </div>
 
             <div className="space-y-3">
-              {localResults.template_outputs.map((output, index) => (
+              {results.template_outputs.map((output, index) => (
                 <div key={index} className="bg-blue-50 dark:bg-blue-900/30 rounded-xl p-4 border border-blue-200 dark:border-blue-800">
                   <div className="flex items-start justify-between">
                     <div className="flex-1">
@@ -327,7 +325,7 @@ const GenerateOutputDisplay: React.FC<GenerateOutputDisplayProps> = ({ results, 
           </div>
         )}
 
-        {activeTab === 'deploy' && localResults.deployment_instructions && (
+        {activeTab === 'deploy' && results.deployment_instructions && (
           <div className="p-6 space-y-6">
             <div className="flex justify-between items-center">
               <div>
@@ -348,11 +346,11 @@ const GenerateOutputDisplay: React.FC<GenerateOutputDisplayProps> = ({ results, 
             </div>
 
             {/* Prerequisites */}
-            {localResults.deployment_instructions.prerequisites && (
+            {results.deployment_instructions.prerequisites && (
               <div>
                 <h4 className="text-lg font-semibold text-gray-900 dark:text-white mb-3">Prerequisites</h4>
                 <div className="space-y-2">
-                  {localResults.deployment_instructions.prerequisites.map((prereq, index) => (
+                  {results.deployment_instructions.prerequisites.map((prereq, index) => (
                     <div key={index} className="flex items-start gap-3 bg-amber-50 dark:bg-amber-900/30 rounded-lg p-3 border border-amber-200 dark:border-amber-800">
                       <svg className="w-5 h-5 text-amber-600 dark:text-amber-400 mt-0.5 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
@@ -365,35 +363,35 @@ const GenerateOutputDisplay: React.FC<GenerateOutputDisplayProps> = ({ results, 
             )}
 
             {/* AWS CLI Command */}
-            {localResults.deployment_instructions.aws_cli_command && (
+            {results.deployment_instructions.aws_cli_command && (
               <div>
                 <h4 className="text-lg font-semibold text-gray-900 dark:text-white mb-3">AWS CLI Deployment</h4>
                 <div className="bg-slate-900 rounded-xl border border-slate-700 overflow-hidden">
                   <div className="bg-slate-800 px-4 py-2 flex items-center justify-between border-b border-slate-700">
                     <span className="text-xs text-slate-400 font-mono">Terminal Command</span>
                     <button
-                      onClick={() => copyToClipboard(localResults.deployment_instructions!.aws_cli_command)}
+                      onClick={() => copyToClipboard(results.deployment_instructions!.aws_cli_command)}
                       className="text-xs text-slate-400 hover:text-slate-300"
                     >
                       Copy
                     </button>
                   </div>
                   <pre className="p-4 text-sm font-mono text-green-400 overflow-x-auto">
-                    <code>{localResults.deployment_instructions.aws_cli_command}</code>
+                    <code>{results.deployment_instructions.aws_cli_command}</code>
                   </pre>
                 </div>
                 <p className="text-xs text-gray-500 dark:text-gray-400 mt-2">
-                  Estimated deployment time: {localResults.deployment_instructions.estimated_deployment_time}
+                  Estimated deployment time: {results.deployment_instructions.estimated_deployment_time}
                 </p>
               </div>
             )}
 
             {/* Console Steps */}
-            {localResults.deployment_instructions.console_steps && (
+            {results.deployment_instructions.console_steps && (
               <div>
                 <h4 className="text-lg font-semibold text-gray-900 dark:text-white mb-3">AWS Console Deployment</h4>
                 <div className="space-y-3">
-                  {localResults.deployment_instructions.console_steps.map((step, index) => (
+                  {results.deployment_instructions.console_steps.map((step, index) => (
                     <div key={index} className="flex items-start gap-3 bg-green-50 dark:bg-green-900/30 rounded-lg p-4 border border-green-200 dark:border-green-800">
                       <div className="flex-shrink-0 w-6 h-6 bg-green-500 dark:bg-green-600 rounded-full flex items-center justify-center text-white text-xs font-bold">
                         {index + 1}
@@ -505,11 +503,11 @@ const GenerateOutputDisplay: React.FC<GenerateOutputDisplayProps> = ({ results, 
 
 
       {/* Footer with MCP Servers */}
-      {localResults.mcp_servers_enabled && localResults.mcp_servers_enabled.length > 0 && (
+      {results.mcp_servers_enabled && results.mcp_servers_enabled.length > 0 && (
         <div className="border-t border-gray-200 dark:border-slate-700 px-6 py-4 bg-gray-50 dark:bg-slate-800">
           <p className="text-xs font-medium text-gray-600 dark:text-gray-400 mb-2">MCP Servers Used:</p>
           <div className="flex flex-wrap gap-2">
-            {localResults.mcp_servers_enabled.map((server) => (
+            {results.mcp_servers_enabled.map((server) => (
               <span
                 key={server}
                 className="px-3 py-1 bg-blue-100 dark:bg-blue-900 text-blue-700 dark:text-blue-300 text-xs font-medium rounded-full border border-blue-200 dark:border-blue-800"
