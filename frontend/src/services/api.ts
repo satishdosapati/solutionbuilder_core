@@ -419,11 +419,6 @@ export const apiService = {
     return response.data;
   },
 
-      cloudformation_template: cloudformationTemplate
-    });
-    return response.data;
-  },
-
   async healthCheck() {
     const response = await api.get('/health');
     return response.data;
