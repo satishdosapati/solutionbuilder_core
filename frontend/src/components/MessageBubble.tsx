@@ -171,22 +171,57 @@ const MessageBubble: React.FC<MessageBubbleProps> = ({ message, onActionClick })
   const isUser = message.type === 'user';
   
   // Function to render markdown code blocks with ChatGPT-style features
-  const renderMarkdownWithCodeBlocks = (text: string) => {
+  const renderMarkdownWithCodeBlocks = (text: string, isStreaming: boolean = false) => {
     if (!text) return null;
-    
-    // Pattern to match code blocks: ```language ... ``` (supports all languages)
-    const codeBlockPattern = /```(\w+)?\s*\n([\s\S]*?)```/g;
     
     const parts: Array<{ 
       type: 'text' | 'code' | 'inline-code'; 
       content: string; 
       language?: string;
+      isIncomplete?: boolean; // Track incomplete blocks during streaming
     }> = [];
     
+    // Pattern to match COMPLETE code blocks: ```language ... ```
+    const codeBlockPattern = /```(\w+)?\s*\n([\s\S]*?)```/g;
+    
+    // For streaming: detect incomplete code blocks (opening ``` but no closing)
+    let incompleteBlock: { start: number; language: string; content: string } | null = null;
+    
+    if (isStreaming) {
+      // Find the last occurrence of opening triple backticks
+      const lastOpenBackticks = text.lastIndexOf('```');
+      
+      if (lastOpenBackticks !== -1) {
+        // Check if there's a closing backtick after this opening
+        const textAfterOpen = text.substring(lastOpenBackticks + 3);
+        const hasClosingBackticks = textAfterOpen.includes('```');
+        
+        if (!hasClosingBackticks) {
+          // We have an incomplete code block
+          const beforeIncomplete = text.substring(0, lastOpenBackticks);
+          
+          // Extract language identifier (if present)
+          const languageMatch = textAfterOpen.match(/^(\w+)?\s*\n/);
+          const language = languageMatch ? (languageMatch[1] || '') : '';
+          const contentStart = languageMatch ? languageMatch[0].length : 0;
+          const content = textAfterOpen.substring(contentStart);
+          
+          incompleteBlock = {
+            start: lastOpenBackticks,
+            language,
+            content
+          };
+          
+          // Process text before incomplete block
+          text = beforeIncomplete;
+        }
+      }
+    }
+    
+    // Find all COMPLETE code blocks in the text before incomplete block
+    const codeBlocks: Array<{ start: number; end: number; language: string; content: string }> = [];
     let match;
     
-    // First, find all code blocks
-    const codeBlocks: Array<{ start: number; end: number; language: string; content: string }> = [];
     while ((match = codeBlockPattern.exec(text)) !== null) {
       codeBlocks.push({
         start: match.index,
@@ -203,22 +238,22 @@ const MessageBubble: React.FC<MessageBubbleProps> = ({ message, onActionClick })
       if (block.start > currentIndex) {
         const beforeText = text.substring(currentIndex, block.start);
         if (beforeText.trim()) {
-          // Process inline code in text
           processInlineCode(beforeText, parts);
         }
       }
       
-      // Add code block
+      // Add complete code block
       parts.push({
         type: 'code',
         content: block.content,
-        language: block.language
+        language: block.language,
+        isIncomplete: false
       });
       
       currentIndex = block.end;
     });
     
-    // Add remaining text after last code block
+    // Add remaining text after last complete code block
     if (currentIndex < text.length) {
       const remainingText = text.substring(currentIndex);
       if (remainingText.trim()) {
@@ -226,9 +261,19 @@ const MessageBubble: React.FC<MessageBubbleProps> = ({ message, onActionClick })
       }
     }
     
-    // If no code blocks found, process entire text for inline code
-    if (parts.length === 0) {
+    // If no code blocks found and no incomplete block, process entire text for inline code
+    if (parts.length === 0 && !incompleteBlock) {
       processInlineCode(text, parts);
+    }
+    
+    // Add incomplete code block at the end (if streaming)
+    if (incompleteBlock) {
+      parts.push({
+        type: 'code',
+        content: incompleteBlock.content,
+        language: incompleteBlock.language,
+        isIncomplete: true // Mark as incomplete for different rendering
+      });
     }
     
     // Render parts
@@ -236,6 +281,21 @@ const MessageBubble: React.FC<MessageBubbleProps> = ({ message, onActionClick })
       <>
         {parts.map((part, index) => {
           if (part.type === 'code') {
+            // For incomplete blocks during streaming, render as plain code without syntax highlighting
+            if (part.isIncomplete && isStreaming) {
+              return (
+                <pre 
+                  key={index}
+                  className="bg-gray-100 dark:bg-gray-800 p-4 rounded-lg overflow-x-auto border border-gray-300 dark:border-gray-600"
+                >
+                  <code className="text-sm font-mono text-gray-800 dark:text-gray-200">
+                    {part.content}
+                  </code>
+                </pre>
+              );
+            }
+            
+            // Complete code block with syntax highlighting
             return (
               <CodeBlock 
                 key={index} 
@@ -265,7 +325,7 @@ const MessageBubble: React.FC<MessageBubbleProps> = ({ message, onActionClick })
   };
   
   // Helper function to process inline code in text
-  const processInlineCode = (text: string, parts: Array<{ type: 'text' | 'code' | 'inline-code'; content: string; language?: string }>) => {
+  const processInlineCode = (text: string, parts: Array<{ type: 'text' | 'code' | 'inline-code'; content: string; language?: string; isIncomplete?: boolean }>) => {
     const inlineCodePattern = /`([^`\n]+)`/g;
     let lastIndex = 0;
     let match;
@@ -511,7 +571,10 @@ const MessageBubble: React.FC<MessageBubbleProps> = ({ message, onActionClick })
                         )}
                       </h5>
                       <div className="text-sm text-blue-800 dark:text-blue-200 max-h-[300px] overflow-auto bg-white dark:bg-gray-800 p-3 rounded border">
-                        {renderMarkdownWithCodeBlocks(message.context.result.cloudformation_response)}
+                        {renderMarkdownWithCodeBlocks(
+                          message.context.result.cloudformation_response,
+                          !message.context?.result?.cloudformation_template // isStreaming = true if template not complete yet
+                        )}
                       </div>
                     </div>
                   </div>
