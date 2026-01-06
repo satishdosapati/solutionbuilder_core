@@ -6,7 +6,7 @@ Comprehensive test suite for AWS Solution Architect Tool covering backend API, s
 
 ```
 tests/
-├── test_api.py                    # API endpoint tests
+├── test_api.py                    # API endpoint tests (unit tests with mocks)
 ├── test_session_manager.py         # Session manager tests
 ├── test_cloudformation_parser.py   # CloudFormation parser tests
 ├── test_question_classifier.py    # Question classifier tests
@@ -14,6 +14,8 @@ tests/
 ├── test_context_extractor.py      # Context extractor tests
 ├── test_quality_validator.py      # Quality validator tests
 ├── test_adaptive_prompt_generator.py  # Prompt generator tests
+├── test_integration.py            # Integration tests (real service logic)
+├── test_integration_mcp.py        # MCP integration tests (real MCP servers)
 ├── requirements.txt               # Test dependencies
 └── pytest.ini                     # Pytest configuration
 
@@ -48,6 +50,15 @@ pytest tests/test_api.py::TestRootEndpoints
 
 # Run with verbose output
 pytest -v
+
+# Run integration tests (tests real service integration)
+pytest tests/test_integration.py -v
+
+# Run MCP integration tests (requires MCP servers running)
+pytest tests/test_integration_mcp.py --test-mcp -v
+
+# Run all tests except MCP tests
+pytest -m "not mcp"
 ```
 
 ### Frontend Tests
@@ -85,6 +96,8 @@ The test suite covers:
 - ✅ Quality validation (citations, tool usage, completeness)
 - ✅ Adaptive prompt generation
 - ✅ Error handling and edge cases
+- ✅ **Integration tests** - Real service integration without mocking business logic
+- ✅ **MCP integration tests** - Tests with real MCP servers (optional, use `--test-mcp` flag)
 
 ### Frontend
 - ✅ API service methods (brainstorm, analyze, generate, follow-up)
