@@ -100,7 +100,7 @@ class TestAnalyzeEndpoint:
     @patch('backend.main.detect_follow_up_question')
     @patch('backend.main.classify_question')
     @patch('backend.main.create_adaptive_prompt')
-    @patch('backend.main.validate_response_quality')
+    @patch('services.quality_validator.validate_response_quality')
     @patch('services.context_extractor.extract_analysis_context')
     def test_analyze_success(self, mock_extract, mock_validate, mock_prompt, 
                             mock_classify, mock_followup, mock_session_manager, mock_agent_class):
@@ -294,7 +294,7 @@ class TestFollowUpEndpoint:
 class TestDiagramEndpoints:
     """Test diagram-related endpoints"""
     
-    @patch('backend.main.get_diagram_stats')
+    @patch('services.diagram_storage.get_diagram_stats')
     def test_get_diagram_stats(self, mock_get_stats):
         """Test getting diagram statistics"""
         mock_get_stats.return_value = {

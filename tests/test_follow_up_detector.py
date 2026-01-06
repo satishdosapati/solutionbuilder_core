@@ -4,7 +4,7 @@ Tests for Follow-Up Question Detector service
 
 import pytest
 from backend.services.follow_up_detector import detect_follow_up_question
-from backend.services.session_manager import SessionManager
+from backend.services.session_manager import session_manager
 
 
 class TestFollowUpDetector:
@@ -12,11 +12,11 @@ class TestFollowUpDetector:
     
     def setup_method(self):
         """Setup test fixtures"""
-        self.session_manager = SessionManager()
-        self.session_id = self.session_manager.create_session()
+        # Use the global session_manager instance (same one used by follow_up_detector)
+        self.session_id = session_manager.create_session()
         
         # Set up previous analysis context
-        self.session_manager.set_last_analysis(
+        session_manager.set_last_analysis(
             self.session_id,
             question="What is AWS Lambda?",
             answer="Lambda is a serverless compute service",
@@ -84,7 +84,7 @@ class TestFollowUpDetector:
     
     def test_no_previous_analysis(self):
         """Test detection when no previous analysis exists"""
-        new_session_id = self.session_manager.create_session()
+        new_session_id = session_manager.create_session()
         result = detect_follow_up_question(
             "How do I use Lambda?",
             new_session_id
@@ -123,12 +123,12 @@ class TestFollowUpDetector:
     def test_conversation_history_impact(self):
         """Test that conversation history affects detection"""
         # Add conversation history
-        self.session_manager.add_to_conversation_history(
+        session_manager.add_to_conversation_history(
             self.session_id,
             "What is Lambda?",
             "Lambda is a serverless service"
         )
-        self.session_manager.add_to_conversation_history(
+        session_manager.add_to_conversation_history(
             self.session_id,
             "How does it scale?",
             "Lambda scales automatically"
