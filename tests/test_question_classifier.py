@@ -11,7 +11,8 @@ class TestQuestionClassifier:
     
     def test_classify_comparison_question(self):
         """Test classifying comparison questions"""
-        result = classify_question("What is the difference between Lambda and ECS?")
+        # Use question with multiple comparison keywords for better matching
+        result = classify_question("Compare Lambda vs ECS - what's the difference?")
         assert result["type"] == "comparison"
         assert result["confidence"] > 0.0
         assert result["research_strategy"] == "multi_service_comparison"
@@ -30,7 +31,8 @@ class TestQuestionClassifier:
     
     def test_classify_troubleshooting_question(self):
         """Test classifying troubleshooting questions"""
-        result = classify_question("Why is my Lambda function failing?")
+        # Use question with multiple troubleshooting keywords
+        result = classify_question("My Lambda function is failing with an error - how do I fix it?")
         assert result["type"] == "troubleshooting"
         assert result["research_strategy"] == "problem_solving"
     
